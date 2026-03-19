@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useUser, useClients, useUsers, useDebtors, signOut, generatePaymentLink, runIntelligence, uploadDocuments, sendEmail, sendSMS, makeCall, useHealth } from "@/lib/hooks";
+import { useUser, useClients, useUsers, useDebtors, signOut, generatePaymentLink, runIntelligence, uploadDocuments, sendEmail, sendSMS, makeCall, useHealth, createPaymentPlan } from "@/lib/hooks";
 import ClientModal from "./ClientModal";
 import UserModal from "./UserModal";
 
@@ -734,21 +734,84 @@ const DebtorPanel = ({ debtor, onClose, onRefresh }) => {
 
         {tab === "actions" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {[
-              { l: "Pause Sequence", c: "#f59e0b" },
-              { l: "Skip to Next Step", c: "#3b82f6" },
-              { l: "Settlement Offer", c: "#10b981" },
-              { l: "Mark Disputed", c: "#ef4444" },
-              { l: "Escalate to Legal", c: "#ef4444" },
-              { l: "Write Off", c: "#6b7280" },
-            ].map((a, i) => (
-              <button key={i} style={{ padding: "9px 11px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 6, cursor: "pointer", textAlign: "left" }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-                onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}
-              >
-                <span style={{ fontSize: 11, fontWeight: 600, color: a.c }}>{a.l}</span>
-              </button>
-            ))}
+            {/* Payment Plan Creator */}
+            <div style={{ background: "rgba(16,185,129,0.04)", border: "1px solid rgba(16,185,129,0.1)", borderRadius: 8, padding: 12, marginBottom: 4 }}>
+              <div style={{ fontSize: 10, color: "#10b981", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>Payment Plan</div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", marginBottom: 3 }}>£/month</div>
+                  <input id="pp-amount" type="number" placeholder="200" style={{ width: "100%", padding: "7px 8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 5, color: "#fff", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", marginBottom: 3 }}>Months</div>
+                  <input id="pp-months" type="number" placeholder="12" style={{ width: "100%", padding: "7px 8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 5, color: "#fff", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
+                </div>
+              </div>
+              <button onClick={async () => {
+                const amt = parseFloat(document.getElementById("pp-amount")?.value);
+                const months = parseInt(document.getElementById("pp-months")?.value);
+                if (!amt && !months) { setActionMsg("Enter monthly amount or number of months"); return; }
+                setActionMsg(null);
+                try {
+                  const res = await createPaymentPlan(debtor.id, amt || undefined, months || undefined);
+                  if (res.error) setActionMsg(res.error);
+                  else {
+                    setStripeResult(res.payment_link);
+                    setActionMsg(`Plan created: ${res.total_months}x £${res.monthly_amount.toFixed(2)}/month. Link generated.`);
+                    if (onRefresh) onRefresh();
+                  }
+                } catch (e) { setActionMsg(e.message); }
+              }} style={{ width: "100%", padding: "8px", background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 6, color: "#10b981", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Generate Plan & Stripe Link</button>
+            </div>
+
+            {/* Quick send plan via channels */}
+            {debtor.stripeLink && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, marginBottom: 4 }}>
+                <button onClick={async () => {
+                  try { await sendEmail(debtor.id, "payment_plan_confirmation"); setActionMsg("Plan confirmation emailed"); if (onRefresh) onRefresh(); } catch(e) { setActionMsg(e.message); }
+                }} style={{ padding: "7px", background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.15)", borderRadius: 5, color: "#3b82f6", cursor: "pointer", fontSize: 9, fontWeight: 600 }}>Email Link</button>
+                <button onClick={async () => {
+                  try { await sendSMS(debtor.id, "sms", null, `Your payment plan link as agreed: ${debtor.stripeLink} - Zenith Legal`); setActionMsg("SMS sent"); if (onRefresh) onRefresh(); } catch(e) { setActionMsg(e.message); }
+                }} style={{ padding: "7px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 5, color: "#f59e0b", cursor: "pointer", fontSize: 9, fontWeight: 600 }}>SMS Link</button>
+                <button onClick={async () => {
+                  try { await sendSMS(debtor.id, "whatsapp", null, `Your payment plan link as agreed: ${debtor.stripeLink} - Zenith Legal`); setActionMsg("WhatsApp sent"); if (onRefresh) onRefresh(); } catch(e) { setActionMsg(e.message); }
+                }} style={{ padding: "7px", background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.15)", borderRadius: 5, color: "#22c55e", cursor: "pointer", fontSize: 9, fontWeight: 600 }}>WhatsApp Link</button>
+              </div>
+            )}
+
+            {/* Other actions */}
+            <button onClick={async () => {
+              const { createBrowserClient } = await import("@/lib/supabase");
+              const sb = createBrowserClient();
+              await sb.from("debtors").update({ sequence_paused: true, next_action: "Sequence paused manually" }).eq("id", debtor.id);
+              setActionMsg("Sequence paused"); if (onRefresh) onRefresh();
+            }} style={{ padding: "9px 11px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 6, cursor: "pointer", textAlign: "left" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#f59e0b" }}>Pause Sequence</span>
+            </button>
+            <button onClick={async () => {
+              const { createBrowserClient } = await import("@/lib/supabase");
+              const sb = createBrowserClient();
+              await sb.from("debtors").update({ sequence_paused: false }).eq("id", debtor.id);
+              setActionMsg("Sequence resumed"); if (onRefresh) onRefresh();
+            }} style={{ padding: "9px 11px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 6, cursor: "pointer", textAlign: "left" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#3b82f6" }}>Resume Sequence</span>
+            </button>
+            <button onClick={async () => {
+              const { createBrowserClient } = await import("@/lib/supabase");
+              const sb = createBrowserClient();
+              await sb.from("debtors").update({ status: "disputed", sequence_paused: true, next_action: "DISPUTED - human review" }).eq("id", debtor.id);
+              setActionMsg("Marked as disputed, sequence paused"); if (onRefresh) onRefresh();
+            }} style={{ padding: "9px 11px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 6, cursor: "pointer", textAlign: "left" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#ef4444" }}>Mark Disputed</span>
+            </button>
+            <button onClick={async () => {
+              const { createBrowserClient } = await import("@/lib/supabase");
+              const sb = createBrowserClient();
+              await sb.from("debtors").update({ status: "escalated", sequence_paused: true, next_action: "Escalated to legal" }).eq("id", debtor.id);
+              setActionMsg("Escalated to legal"); if (onRefresh) onRefresh();
+            }} style={{ padding: "9px 11px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 6, cursor: "pointer", textAlign: "left" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#ef4444" }}>Escalate to Legal</span>
+            </button>
           </div>
         )}
       </div>
