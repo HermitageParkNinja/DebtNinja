@@ -83,7 +83,34 @@ export async function POST(request) {
 
       if (outcome === 'payment_agreed') {
         updates.status = 'negotiating'
-        updates.next_action = 'Payment arrangement agreed - generate Stripe link'
+        updates.next_action = 'Payment arrangement agreed - generating Stripe link'
+
+        // Auto-generate payment link and send via SMS
+        try {
+          // Generate a standard payment link first
+          const stripeRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/stripe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ debtor_id: debtorId }),
+          })
+          const stripeData = await stripeRes.json()
+
+          if (stripeData.payment_link) {
+            // Send the link via SMS immediately
+            await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/sms`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                debtor_id: debtorId,
+                channel: 'sms',
+                custom_message: `Following our conversation, here is your secure payment link as agreed: ${stripeData.payment_link} - Zenith Legal Services`,
+              }),
+            })
+            updates.next_action = 'Payment link sent via SMS after call'
+          }
+        } catch (e) {
+          console.error('Auto payment link failed:', e)
+        }
       } else if (outcome === 'callback_requested') {
         updates.next_action = `Callback requested${callbackDate ? ': ' + callbackDate : ''}`
         // Schedule the callback in timeline
