@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerClient } from '@/lib/supabase'
 
+export const maxDuration = 120 // 2 minutes
+
 const getAnthropic = () => new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const CVL_SYSTEM_PROMPT = `You are an expert UK insolvency analyst working for a debt recovery firm. You analyse case documents (bank statement analyses, Director's Conduct Reports, LexisNexis trace reports, Statements of Affairs, correspondence) and extract structured intelligence about recoverable amounts.
