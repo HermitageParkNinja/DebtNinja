@@ -38,7 +38,8 @@ async function processPayment(supabase, stripe, debtorId, amountPaid, metadata) 
   }
 
   const remaining = totalOwed - newTotalPaid
-  const isSettled = remaining <= 0.50 // Allow 50p tolerance for rounding
+  const isSettlement = metadata.settlement === 'true'
+  const isSettled = remaining <= 0.50 || isSettlement // Settlement = full and final regardless of remaining
 
   const amountStr = amountPaid.toLocaleString('en-GB', { style: 'currency', currency: 'GBP' })
   const remainStr = Math.max(0, remaining).toLocaleString('en-GB', { style: 'currency', currency: 'GBP' })
@@ -48,7 +49,7 @@ async function processPayment(supabase, stripe, debtorId, amountPaid, metadata) 
     payments: newTotalPaid,
     status: isSettled ? 'settled' : 'payment_plan',
     sequence_paused: true,
-    next_action: isSettled ? 'SETTLED IN FULL' : `${remainStr} remaining`,
+    next_action: isSettled ? (isSettlement ? 'SETTLED - Full and final settlement accepted' : 'SETTLED IN FULL') : `${remainStr} remaining`,
     last_contact: new Date().toISOString(),
   }).eq('id', debtorId)
 
@@ -60,7 +61,7 @@ async function processPayment(supabase, stripe, debtorId, amountPaid, metadata) 
     status: 'sent',
     result: isSettled ? 'paid_full' : 'partial_paid',
     summary: isSettled
-      ? `SETTLED IN FULL - Final payment of ${amountStr} received`
+      ? (isSettlement ? `SETTLEMENT ACCEPTED - ${amountStr} full and final` : `SETTLED IN FULL - Final payment of ${amountStr} received`)
       : `Payment received: ${amountStr} (${remainStr} remaining)`,
     metadata: { amount: amountPaid, total_paid: newTotalPaid, remaining, ...metadata },
     executed_at: new Date().toISOString(),
@@ -148,6 +149,7 @@ export async function POST(request) {
         payment_intent: session.payment_intent,
         session_id: session.id,
         subscription_id: session.subscription || null,
+        settlement: session.metadata?.settlement || 'false',
       })
     }
   }
