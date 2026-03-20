@@ -37,9 +37,20 @@ export async function POST(request) {
       return NextResponse.json({ error: 'No amount outstanding' }, { status: 400 })
     }
 
-    // If monthly amount specified, calculate number of months
-    const monthlyPence = Math.round((monthly_amount || Math.ceil(totalOwed / (num_months || 3))) * 100)
-    const months = num_months || Math.ceil(totalOwed / (monthly_amount || totalOwed))
+    // 48-month maximum plan length
+    const MAX_MONTHS = 48
+    const minimumMonthly = Math.ceil(totalOwed / MAX_MONTHS)
+
+    // Calculate monthly amount and months
+    let monthlyAmount = monthly_amount || Math.ceil(totalOwed / (num_months || 3))
+
+    // Enforce minimum - if proposed amount would take longer than 48 months, force it up
+    if (monthlyAmount < minimumMonthly) {
+      monthlyAmount = minimumMonthly
+    }
+
+    const monthlyPence = Math.round(monthlyAmount * 100)
+    const months = Math.min(Math.ceil(totalOwed / monthlyAmount), MAX_MONTHS)
 
     // Create a Stripe product for this debtor
     const product = await stripe.products.create({
