@@ -635,32 +635,68 @@ const DebtorPanel = ({ debtor, onClose, onRefresh }) => {
       </div>
 
       <div style={{ padding: "0 18px 18px" }}>
-       {tab === "sequence" && (
+        {tab === "sequence" && (
           <div>
-            {(debtor.timeline || []).length === 0 && (
-              <div style={{ padding: 20, textAlign: "center", color: "rgba(255,255,255,0.2)", fontSize: 12 }}>No activity yet</div>
-            )}
-            {(debtor.timeline || []).sort((a, b) => (b.ts || "").localeCompare(a.ts || "")).map((t, i) => {
-              const ch = CHANNELS[t.channel] || { icon: "📋", color: "#6b7280", label: t.channel };
-              return (
-                <div key={i} style={{ display: "flex", gap: 12, marginBottom: 2 }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 26, flexShrink: 0 }}>
-                    <div style={{ width: 9, height: 9, borderRadius: 5, background: ch.color, border: `2px solid ${ch.color}`, zIndex: 1, boxShadow: `0 0 6px ${ch.color}44` }} />
-                    {i < (debtor.timeline || []).length - 1 && <div style={{ width: 1.5, flex: 1, background: "rgba(255,255,255,0.06)", minHeight: 28 }} />}
-                  </div>
-                  <div style={{ flex: 1, paddingBottom: 14 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
-                      <span style={{ fontSize: 10 }}>{ch.icon}</span>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: "#fff" }}>{ch.label || t.channel}</span>
-                      <span style={{ fontSize: 9, color: ch.color, fontWeight: 600 }}>{(t.result || "").replace(/_/g, " ")}</span>
-                      {t.day > 0 && <span style={{ fontSize: 8, color: "rgba(255,255,255,0.2)", fontFamily: "var(--mono)" }}>Day {t.day}</span>}
+            {/* Real activity */}
+            {(debtor.timeline || []).length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--mono)", marginBottom: 8 }}>Activity</div>
+                {(debtor.timeline || []).sort((a, b) => (b.ts || "").localeCompare(a.ts || "")).map((t, i) => {
+                  const ch = CHANNELS[t.channel] || { icon: "📋", color: "#6b7280", label: t.channel };
+                  return (
+                    <div key={i} style={{ display: "flex", gap: 12, marginBottom: 2 }}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 26, flexShrink: 0 }}>
+                        <div style={{ width: 9, height: 9, borderRadius: 5, background: ch.color, border: `2px solid ${ch.color}`, zIndex: 1, boxShadow: `0 0 6px ${ch.color}44` }} />
+                        {i < (debtor.timeline || []).length - 1 && <div style={{ width: 1.5, flex: 1, background: "rgba(255,255,255,0.06)", minHeight: 20 }} />}
+                      </div>
+                      <div style={{ flex: 1, paddingBottom: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+                          <span style={{ fontSize: 10 }}>{ch.icon}</span>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: "#fff" }}>{ch.label || t.channel}</span>
+                          <span style={{ fontSize: 9, color: ch.color, fontWeight: 600 }}>{t.direction === "in" ? "↙ " : "↗ "}{(t.result || "").replace(/_/g, " ")}</span>
+                        </div>
+                        {t.ts && <div style={{ fontSize: 8, color: "rgba(255,255,255,0.2)", fontFamily: "var(--mono)", marginBottom: 2 }}>{new Date(t.ts).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>}
+                        {(t.summary || t.transcript) && <div style={{ padding: "5px 7px", background: "rgba(255,255,255,0.02)", borderRadius: 4, borderLeft: `2px solid ${ch.color}`, fontSize: 10, color: "rgba(255,255,255,0.45)", lineHeight: 1.5, fontStyle: t.transcript ? "italic" : "normal", maxHeight: 150, overflowY: "auto" }}>{t.transcript || t.summary}</div>}
+                      </div>
                     </div>
-                    {t.ts && <div style={{ fontSize: 8, color: "rgba(255,255,255,0.2)", fontFamily: "var(--mono)", marginBottom: 3 }}>{new Date(t.ts).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>}
-                   {(tl?.summary || tl?.transcript) && <div style={{ marginLeft: 39, marginTop: 3, fontSize: 10, color: "rgba(255,255,255,0.3)", fontStyle: tl.transcript ? "italic" : "normal", padding: "3px 7px", background: "rgba(255,255,255,0.02)", borderRadius: 4, borderLeft: `2px solid ${ch.color}`, maxHeight: 120, overflowY: "auto" }}>{tl.transcript || tl.summary}</div>}
-                  </div>
+                  );
+                })}
+              </div>
+            )}
+            {(debtor.timeline || []).length === 0 && (
+              <div style={{ padding: 16, textAlign: "center", color: "rgba(255,255,255,0.15)", fontSize: 11, marginBottom: 16 }}>No activity yet</div>
+            )}
+
+            {/* Upcoming steps */}
+            {seq && (() => {
+              const firedChannels = new Set((debtor.timeline || []).map(t => t.day + "_" + t.channel));
+              const upcoming = seq.steps.filter(s => !firedChannels.has(s.day + "_" + s.channel));
+              if (upcoming.length === 0) return null;
+              return (
+                <div>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--mono)", marginBottom: 8, borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 12 }}>Coming Up</div>
+                  {upcoming.map((s, i) => {
+                    const ch = CHANNELS[s.channel];
+                    return (
+                      <div key={i} style={{ display: "flex", gap: 12, marginBottom: 2 }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 26, flexShrink: 0 }}>
+                          <div style={{ width: 9, height: 9, borderRadius: 5, background: "rgba(255,255,255,0.06)", border: "2px solid rgba(255,255,255,0.04)" }} />
+                          {i < upcoming.length - 1 && <div style={{ width: 1.5, flex: 1, background: "rgba(255,255,255,0.03)", minHeight: 20 }} />}
+                        </div>
+                        <div style={{ flex: 1, paddingBottom: 10 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <span style={{ fontSize: 9, fontFamily: "var(--mono)", color: "rgba(255,255,255,0.15)", minWidth: 30 }}>D{s.day}</span>
+                            <span style={{ fontSize: 10, opacity: 0.4 }}>{ch.icon}</span>
+                            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)" }}>{s.action}</span>
+                            <span style={{ fontSize: 7, padding: "1px 4px", borderRadius: 2, background: s.auto ? "rgba(59,130,246,0.06)" : "rgba(245,158,11,0.06)", color: s.auto ? "rgba(59,130,246,0.5)" : "rgba(245,158,11,0.5)", fontWeight: 700 }}>{s.auto ? "AUTO" : "MANUAL"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               );
-            })}
+            })()}
           </div>
         )}
 
