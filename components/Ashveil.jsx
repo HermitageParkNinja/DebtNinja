@@ -111,8 +111,8 @@ function normalizeDebtor(d) {
       legalBasis: (intel.claims || [])[0] || ""
     } : null,
     timeline: (d.timeline || []).map(t => ({
-      day: t.sequence_day, channel: t.channel, status: t.status,
-      result: t.result, ts: t.executed_at, transcript: t.transcript
+      day: t.sequence_day, channel: t.channel, status: t.status, direction: t.direction,
+      result: t.result, ts: t.executed_at, transcript: t.transcript, summary: t.summary
     })),
     _raw: d, // Keep raw data for updates
   };
@@ -656,7 +656,7 @@ const DebtorPanel = ({ debtor, onClose, onRefresh }) => {
                       {t.day > 0 && <span style={{ fontSize: 8, color: "rgba(255,255,255,0.2)", fontFamily: "var(--mono)" }}>Day {t.day}</span>}
                     </div>
                     {t.ts && <div style={{ fontSize: 8, color: "rgba(255,255,255,0.2)", fontFamily: "var(--mono)", marginBottom: 3 }}>{new Date(t.ts).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>}
-                    {t.transcript && <div style={{ padding: "6px 8px", background: "rgba(255,255,255,0.02)", borderRadius: 4, borderLeft: `2px solid ${ch.color}`, fontSize: 10, color: "rgba(255,255,255,0.5)", lineHeight: 1.5, fontStyle: "italic", maxHeight: 120, overflowY: "auto" }}>{t.transcript}</div>}
+                   {(tl?.summary || tl?.transcript) && <div style={{ marginLeft: 39, marginTop: 3, fontSize: 10, color: "rgba(255,255,255,0.3)", fontStyle: tl.transcript ? "italic" : "normal", padding: "3px 7px", background: "rgba(255,255,255,0.02)", borderRadius: 4, borderLeft: `2px solid ${ch.color}`, maxHeight: 120, overflowY: "auto" }}>{tl.transcript || tl.summary}</div>}
                   </div>
                 </div>
               );
