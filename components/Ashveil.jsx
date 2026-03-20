@@ -847,6 +847,43 @@ export default function Ashveil() {
   const [showClientModal, setShowClientModal] = useState(null); // null or client object or {}
   const [showUserModal, setShowUserModal] = useState(false);
 
+  // Auto-refresh selected debtor when data updates
+  useEffect(() => {
+    if (selected && debtors.length > 0) {
+      const updated = debtors.find(d => d.id === selected.id);
+      if (updated) setSelected(updated);
+    }
+  }, [debtors]);
+
+  // Auto-refresh data every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => { refreshDebtors(); }, 30000);
+    return () => clearInterval(interval);
+  }, [refreshDebtors]);
+
+  // Compute real channel stats from all timelines
+  const channelStats = useMemo(() => {
+    const stats = { email: { sent: 0, engaged: 0 }, call: { sent: 0, engaged: 0 }, sms: { sent: 0, engaged: 0 }, whatsapp: { sent: 0, engaged: 0 }, payment: { sent: 0, engaged: 0 } };
+    debtors.forEach(d => {
+      (d.timeline || []).forEach(t => {
+        if (t.status === "sent" && stats[t.channel]) {
+          stats[t.channel].sent++;
+          if (["opened", "replied", "answered", "partial_paid", "paid_full", "link_generated"].includes(t.result)) {
+            stats[t.channel].engaged++;
+          }
+        }
+      });
+    });
+    return stats;
+  }, [debtors]);
+
+  // Recent activity from all debtors
+  const recentActivity = useMemo(() => {
+    return debtors.flatMap(d =>
+      (d.timeline || []).filter(t => t.ts).map(t => ({ ...t, debtor: d }))
+    ).sort((a, b) => (b.ts || "").localeCompare(a.ts || "")).slice(0, 15);
+  }, [debtors]);
+
   const totalOwed = useMemo(() => debtors.reduce((s, d) => s + calcTotalOwed(d), 0), [debtors]);
   const totalRecovered = debtors.reduce((s, d) => s + d.payments, 0);
   const filtered = debtors.filter(d => {
@@ -998,6 +1035,50 @@ export default function Ashveil() {
               );
             })}
           </div>
+
+          {/* Channel Performance - real data */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 18 }}>
+            {Object.entries(channelStats).map(([ch, s]) => {
+              const cfg = CHANNELS[ch];
+              if (!cfg) return null;
+              const rate = s.sent > 0 ? Math.round((s.engaged / s.sent) * 100) + "%" : "0%";
+              return (
+                <div key={ch} style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, padding: "10px 9px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 6 }}>
+                    <span style={{ fontSize: 11 }}>{cfg.icon}</span>
+                    <span style={{ fontSize: 9, fontWeight: 600, color: cfg.color }}>{cfg.label}</span>
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--mono)", marginBottom: 2 }}>{rate}</div>
+                  <div style={{ fontSize: 8, color: "rgba(255,255,255,0.2)" }}>{s.sent} sent / {s.engaged} engaged</div>
+                  <div style={{ marginTop: 5 }}><Bar value={s.engaged} max={Math.max(s.sent, 1)} color={cfg.color} h={3} /></div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Recent Activity - real data */}
+          {recentActivity.length > 0 && (<>
+            <h2 style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.5)", marginBottom: 10 }}>Recent Activity</h2>
+            <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, marginBottom: 18 }}>
+              {recentActivity.map((item, i) => {
+                const cfg = CHANNELS[item.channel] || { icon: "📋", color: "#6b7280" };
+                return (
+                  <div key={i} onClick={() => { setSelected(item.debtor); setView("debtors"); }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < recentActivity.length - 1 ? "1px solid rgba(255,255,255,0.03)" : "none", cursor: "pointer" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  >
+                    <span style={{ fontSize: 12 }}>{cfg.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600 }}>{item.debtor?.company || "Unknown"}</span>
+                      <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginLeft: 6 }}>{item.result?.replace(/_/g, " ") || item.channel}</span>
+                    </div>
+                    <div style={{ fontSize: 8, color: "rgba(255,255,255,0.15)", fontFamily: "var(--mono)" }}>{item.ts ? new Date(item.ts).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </>)}
         </div>)}
 
         {/* DEBTORS */}
