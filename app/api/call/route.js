@@ -63,7 +63,7 @@ CRITICAL SPEECH RULES:
 - NEVER say "point zero zero" or read decimal places for whole amounts.
 - Be conversational and natural. You are a human collections agent, not a robot.
 - Use short sentences. Pause naturally.
-- If they ask who you are: "I'm calling from Zenith Legal Services regarding an outstanding matter."
+- If they ask who you are: "I'm calling from Zennith Legal Services regarding an outstanding matter."
 - If they get aggressive or threaten you: stay calm, say "I understand this is difficult, but we do need to resolve this matter" and continue.
 - If they say they have a solicitor: say "That's fine, please have your solicitor contact us at settlements@zenithlegalgroup.com" and end the call politely.
 - If they say they are vulnerable or have a disability: say "I understand, I'll make a note and have someone from our team contact you directly to discuss your circumstances" and end the call politely.
@@ -86,9 +86,9 @@ ${assetContext}
 
     // Tone-specific instructions
     const tones = {
-      professional: `You are calling on behalf of Zenith Legal Services regarding an outstanding sum of ${amountSpoken} relating to ${debtor.company}. Be professional and courteous but clear that payment is required. Offer to discuss payment arrangements. If they can't pay in full, suggest instalments. ${coreInstructions}`,
-      firm: `You are calling on behalf of Zenith Legal Services regarding an overdue payment of ${amountSpoken} for ${debtor.company}. Previous correspondence has gone unanswered. Be direct and firm. Make clear that failure to engage will result in escalation. Do not be rude but do not be soft. ${flagContext} ${coreInstructions}`,
-      final: `This is a final call from Zenith Legal Services regarding ${amountSpoken} outstanding for ${debtor.company}. Make clear that legal proceedings are being prepared and this is the last opportunity to settle or propose terms before escalation. Be serious and direct. ${flagContext} ${coreInstructions}`,
+      professional: `You are calling on behalf of Zennith Legal Services regarding an outstanding sum of ${amountSpoken} relating to ${debtor.company}. Be professional and courteous but clear that payment is required. Offer to discuss payment arrangements. If they can't pay in full, suggest instalments. ${coreInstructions}`,
+      firm: `You are calling on behalf of Zennith Legal Services regarding an overdue payment of ${amountSpoken} for ${debtor.company}. Previous correspondence has gone unanswered. Be direct and firm. Make clear that failure to engage will result in escalation. Do not be rude but do not be soft. ${flagContext} ${coreInstructions}`,
+      final: `This is a final call from Zennith Legal Services regarding ${amountSpoken} outstanding for ${debtor.company}. Make clear that legal proceedings are being prepared and this is the last opportunity to settle or propose terms before escalation. Be serious and direct. ${flagContext} ${coreInstructions}`,
     }
 
     const systemMessage = tones[tone] || tones.professional
@@ -121,6 +121,7 @@ ${assetContext}
           endCallMessage: 'Thank you for your time. Goodbye.',
           maxDurationSeconds: 300,
           silenceTimeoutSeconds: 15,
+          responseDelaySeconds: 0.5,
           endCallPhrases: ['I want to speak to a solicitor', 'I am going to kill', 'I am vulnerable', 'I have a disability'],
           serverUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/vapi`,
           metadata: {
