@@ -171,20 +171,34 @@ const AddDebtorModal = ({ onClose, onAdd }) => {
     setDocs(prev => [...prev, ...files.map(f => ({ name: f.name, size: (f.size / 1024).toFixed(0) + " KB" }))]);
   };
 
+  const [progressMsg, setProgressMsg] = useState("");
+
   const runAI = async () => {
     setProcessing(true);
     setAiError(null);
+    setProgressMsg("Uploading documents...");
     try {
       let documentsText = "";
 
-      // Upload files to server for PDF text extraction
+      // Upload files to server for extraction
       if (realFiles.length > 0) {
+        setProgressMsg(`Uploading ${realFiles.length} file${realFiles.length > 1 ? "s" : ""}...`);
         const formData = new FormData();
         formData.append("debtor_id", "temp_" + Date.now());
         realFiles.forEach(f => formData.append("files", f));
 
         const uploadRes = await fetch("/api/documents", { method: "POST", body: formData });
+
+        if (!uploadRes.ok) {
+          const errText = await uploadRes.text();
+          throw new Error("Upload failed: " + errText.substring(0, 200));
+        }
+
         const uploadData = await uploadRes.json();
+
+        if (uploadData.error) throw new Error(uploadData.error);
+
+        setProgressMsg(`${uploadData.file_count || realFiles.length} files processed. ${uploadData.truncated ? "Some content truncated. " : ""}Analysing...`);
 
         if (uploadData.extracted_text) {
           documentsText = uploadData.extracted_text;
@@ -199,21 +213,34 @@ const AddDebtorModal = ({ onClose, onAdd }) => {
         documentsText += `\n\n--- Case Details ---\nDirector: ${form.name}\nCompany: ${form.company} (${form.coNumber})`;
       }
 
-      if (!documentsText.trim()) {
-        setAiError("No document text could be extracted. Upload readable PDFs or text files.");
+      if (!documentsText || documentsText.trim().length < 20) {
+        setAiError("No readable text could be extracted. Check your PDFs aren't scanned images. Try uploading text files or a ZIP containing PDFs.");
         setProcessing(false);
+        setProgressMsg("");
         return;
       }
 
-      const result = await runIntelligence(null, debtType, documentsText);
+      setProgressMsg("Claude is analysing your documents...");
 
-      if (result.error) {
-        setAiError(result.error);
-        setProcessing(false);
-        return;
+      const result = await fetch("/api/intelligence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ debtor_id: null, type: debtType, documents_text: documentsText }),
+      });
+
+      if (!result.ok) {
+        const errText = await result.text();
+        throw new Error("Analysis failed: " + errText.substring(0, 200));
       }
 
-      const analysis = result.analysis;
+      const data = await result.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      const analysis = data.analysis;
+      setProgressMsg("");
 
       if (debtType === "cvl") {
         setAiResult({
@@ -250,7 +277,9 @@ const AddDebtorModal = ({ onClose, onAdd }) => {
       }
       setStep(3);
     } catch (err) {
-      setAiError(err.message || "AI analysis failed");
+      console.error("AI analysis error:", err);
+      setAiError(err.message || "Analysis failed. Try with fewer files or check your API key has credit.");
+      setProgressMsg("");
     }
     setProcessing(false);
   };
@@ -376,13 +405,13 @@ const AddDebtorModal = ({ onClose, onAdd }) => {
               border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 10, padding: docs.length > 0 ? "14px" : "36px 14px",
               textAlign: "center", cursor: "pointer", background: "rgba(255,255,255,0.015)", marginBottom: 14
             }}>
-              <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.xlsx,.csv,.txt" onChange={handleFileSelect} style={{ display: "none" }} />
+              <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.xlsx,.csv,.txt,.zip" onChange={handleFileSelect} style={{ display: "none" }} />
               {docs.length === 0 ? (
                 <>
                   <div style={{ fontSize: 26, marginBottom: 6, opacity: 0.4 }}>📁</div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.5)", marginBottom: 3 }}>Drop intelligence docs here</div>
                   <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>
-                    {debtType === "cvl" ? "Bank analyses, DCRs, LexisNexis, SoA, correspondence" : "Invoices, contracts, correspondence, credit checks"}
+                    {debtType === "cvl" ? "Bank analyses, DCRs, LexisNexis, SoA, correspondence. ZIP files accepted." : "Invoices, contracts, correspondence, credit checks. ZIP files accepted."}
                   </div>
                 </>
               ) : (
@@ -398,6 +427,9 @@ const AddDebtorModal = ({ onClose, onAdd }) => {
               )}
             </div>
 
+            {progressMsg && <div style={{ padding: "10px 14px", background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.12)", borderRadius: 6, marginBottom: 10, fontSize: 11, color: "#3b82f6", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ animation: "pulse 1.5s infinite" }}>⏳</span> {progressMsg}
+            </div>}
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
               <button onClick={() => setStep(1)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 7, color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 12 }}>← Back</button>
               <button onClick={runAI} disabled={processing} style={{
