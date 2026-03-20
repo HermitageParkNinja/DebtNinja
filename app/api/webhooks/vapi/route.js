@@ -28,10 +28,26 @@ export async function POST(request) {
       let callbackDate = null
       const transcriptText = typeof transcript === 'string' ? transcript : JSON.stringify(transcript)
 
-      if (transcriptText.includes('OUTCOME: PAYMENT_AGREED')) outcome = 'payment_agreed'
+      let agreedAmount = null
+
+      if (transcriptText.includes('OUTCOME: PAYMENT_FULL')) {
+        outcome = 'payment_full'
+        const match = transcriptText.match(/OUTCOME: PAYMENT_FULL\s+(\d+[\d.,]*)/)
+        if (match) agreedAmount = parseFloat(match[1].replace(/,/g, ''))
+      }
+      else if (transcriptText.includes('OUTCOME: PAYMENT_PLAN')) {
+        outcome = 'payment_plan'
+        const match = transcriptText.match(/OUTCOME: PAYMENT_PLAN\s+(\d+[\d.,]*)/)
+        if (match) agreedAmount = parseFloat(match[1].replace(/,/g, ''))
+      }
+      else if (transcriptText.includes('OUTCOME: PAYMENT_AGREED')) {
+        outcome = 'payment_agreed'
+        // Legacy format - try to extract any number near it
+        const match = transcriptText.match(/OUTCOME: PAYMENT_AGREED\s*(\d+[\d.,]*)/)
+        if (match) agreedAmount = parseFloat(match[1].replace(/,/g, ''))
+      }
       else if (transcriptText.includes('OUTCOME: CALLBACK_REQUESTED')) {
         outcome = 'callback_requested'
-        // Try to extract the callback time
         const match = transcriptText.match(/OUTCOME: CALLBACK_REQUESTED\s*\[?([^\]]*)\]?/)
         if (match) callbackDate = match[1].trim()
       }
@@ -46,8 +62,11 @@ export async function POST(request) {
       const cleanTranscript = transcriptText.replace(/OUTCOME:.*$/gm, '').trim()
 
       // Build summary based on outcome
+      const amountStr = agreedAmount ? `£${agreedAmount.toLocaleString('en-GB', { minimumFractionDigits: 2 })}` : ''
       const outcomeSummaries = {
-        payment_agreed: 'Debtor agreed to payment arrangement',
+        payment_full: `Debtor agreed to pay in full${amountStr ? ': ' + amountStr : ''}`,
+        payment_plan: `Debtor agreed payment plan${amountStr ? ': ' + amountStr + '/month' : ''}`,
+        payment_agreed: `Debtor agreed to payment${amountStr ? ': ' + amountStr : ''}`,
         callback_requested: `Debtor requested callback${callbackDate ? ': ' + callbackDate : ''}`,
         disputed: 'Debtor disputes the debt - HUMAN REVIEW REQUIRED',
         refused: 'Debtor refused to engage',
@@ -80,37 +99,114 @@ export async function POST(request) {
 
       // Update debtor based on outcome
       const updates = { last_contact: new Date().toISOString() }
+      const BASE_URL = process.env.NEXT_PUBLIC_APP_URL
 
-      if (outcome === 'payment_agreed') {
-        updates.status = 'negotiating'
-        updates.next_action = 'Payment arrangement agreed - generating Stripe link'
-
-        // Auto-generate payment link and send via SMS
+      // Auto-create payment plan or full payment link
+      async function autoSendPaymentLink(type, monthlyAmount, fullAmount) {
         try {
-          // Generate a standard payment link first
-          const stripeRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/stripe`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ debtor_id: debtorId }),
-          })
-          const stripeData = await stripeRes.json()
+          let linkUrl = null
 
-          if (stripeData.payment_link) {
-            // Send the link via SMS immediately
-            await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/sms`, {
+          if (type === 'plan' && monthlyAmount) {
+            // Create instalment plan
+            const planRes = await fetch(`${BASE_URL}/api/payment-plan`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                debtor_id: debtorId,
-                channel: 'sms',
-                custom_message: `Following our conversation, here is your secure payment link as agreed: ${stripeData.payment_link} - Zenith Legal Services`,
-              }),
+              body: JSON.stringify({ debtor_id: debtorId, monthly_amount: monthlyAmount }),
             })
-            updates.next_action = 'Payment link sent via SMS after call'
+            const planData = await planRes.json()
+            linkUrl = planData.payment_link
+          } else {
+            // Full or settlement payment link - pass custom amount if it's a settlement
+            const body = { debtor_id: debtorId }
+            if (fullAmount) {
+              body.custom_amount = fullAmount
+              body.settlement = true
+            }
+            const stripeRes = await fetch(`${BASE_URL}/api/stripe`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            })
+            const stripeData = await stripeRes.json()
+            linkUrl = stripeData.payment_link
+          }
+
+          if (linkUrl) {
+            let msg
+            if (type === 'plan') {
+              msg = `Following our conversation, here is your secure payment plan link for £${monthlyAmount}/month as agreed: ${linkUrl} - Zennith Legal Services`
+            } else if (fullAmount) {
+              msg = `Following our conversation, here is your secure payment link for the agreed settlement of £${fullAmount.toLocaleString('en-GB')} as discussed: ${linkUrl} - Zennith Legal Services`
+            } else {
+              msg = `Following our conversation, here is your secure payment link as agreed: ${linkUrl} - Zennith Legal Services`
+            }
+
+            // Send via SMS
+            await fetch(`${BASE_URL}/api/sms`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ debtor_id: debtorId, channel: 'sms', custom_message: msg }),
+            })
+
+            // Also send via email
+            await fetch(`${BASE_URL}/api/email`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ debtor_id: debtorId, template: 'payment_plan_confirmation' }),
+            })
+
+            return linkUrl
           }
         } catch (e) {
           console.error('Auto payment link failed:', e)
         }
+        return null
+      }
+
+      if (outcome === 'payment_full') {
+        updates.status = 'negotiating'
+        // Check if the agreed amount is less than full - if so, it's a settlement
+        let isSettlement = false
+        if (agreedAmount) {
+          const { data: dbt } = await supabase.from('debtors').select('base_amount, principal, daily_interest, invoice_date, type, payments').eq('id', debtorId).single()
+          if (dbt) {
+            let fullAmount
+            if (dbt.type === 'cvl') { fullAmount = parseFloat(dbt.base_amount) - parseFloat(dbt.payments) }
+            else { const days = Math.max(0, Math.floor((new Date() - new Date(dbt.invoice_date)) / 86400000)); fullAmount = parseFloat(dbt.principal) + (parseFloat(dbt.daily_interest) * days) - parseFloat(dbt.payments) }
+            isSettlement = agreedAmount < fullAmount * 0.99
+          }
+        }
+        if (isSettlement) {
+          updates.next_action = `Settlement agreed: £${agreedAmount.toLocaleString('en-GB')} - generating Stripe link`
+        } else {
+          updates.next_action = 'Full payment agreed - generating Stripe link'
+        }
+        const link = await autoSendPaymentLink('full', null, agreedAmount || null)
+        if (link) {
+          updates.next_action = isSettlement
+            ? `Settlement £${agreedAmount.toLocaleString('en-GB')} link sent via SMS and email`
+            : 'Full payment link sent via SMS and email'
+        }
+
+      } else if (outcome === 'payment_plan' && agreedAmount) {
+        updates.status = 'payment_plan'
+        updates.next_action = `Plan agreed: £${agreedAmount}/month - generating Stripe link`
+        updates.sequence_paused = true
+        const link = await autoSendPaymentLink('plan', agreedAmount)
+        if (link) updates.next_action = `£${agreedAmount}/month plan link sent via SMS and email`
+
+      } else if (outcome === 'payment_agreed') {
+        // Legacy or amount not extracted - generate standard link
+        updates.status = 'negotiating'
+        updates.next_action = 'Payment agreed - generating Stripe link'
+        if (agreedAmount) {
+          const link = await autoSendPaymentLink('plan', agreedAmount)
+          if (link) updates.next_action = `£${agreedAmount}/month plan link sent via SMS and email`
+        } else {
+          const link = await autoSendPaymentLink('full')
+          if (link) updates.next_action = 'Payment link sent via SMS and email'
+        }
+
       } else if (outcome === 'callback_requested') {
         updates.next_action = `Callback requested${callbackDate ? ': ' + callbackDate : ''}`
         // Schedule the callback in timeline
