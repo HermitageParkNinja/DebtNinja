@@ -21,6 +21,20 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Debtor not found' }, { status: 404 })
     }
 
+    // Check if we already have a valid payment link
+    if (debtor.stripe_payment_link_url) {
+      // For CVL debts the amount is fixed, reuse the link
+      // For commercial debts, amount changes daily so we may need a new one
+      if (debtor.type === 'cvl') {
+        return NextResponse.json({
+          success: true,
+          payment_link: debtor.stripe_payment_link_url,
+          amount: parseFloat(debtor.base_amount) - parseFloat(debtor.payments),
+          reused: true,
+        })
+      }
+    }
+
     // Calculate current amount owed
     let amount
     if (debtor.type === 'cvl') {
