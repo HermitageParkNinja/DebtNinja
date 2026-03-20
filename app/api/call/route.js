@@ -101,7 +101,7 @@ ${assetContext}
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        phoneNumberId: process.env.VAPI_PHONE_NUMBER_ID || undefined,
+        phoneNumberId: (() => { const ids = (process.env.VAPI_PHONE_NUMBER_IDS || process.env.VAPI_PHONE_NUMBER_ID || '').split(',').filter(Boolean); return ids[Math.floor(Math.random() * ids.length)]; })(),
         customer: {
           number: phoneNumber,
           name: debtor.name,
