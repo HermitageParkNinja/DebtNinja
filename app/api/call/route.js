@@ -38,9 +38,7 @@ export async function POST(request) {
       amount = parseFloat(debtor.principal) + (parseFloat(debtor.daily_interest) * days) - parseFloat(debtor.payments)
     }
 
-    const amountStr = amount.toLocaleString('en-GB', { style: 'currency', currency: 'GBP' })
-
-    // Build intelligence context for the AI
+    // Build intelligence context
     const intel = debtor.intelligence?.[0]
     const assetContext = intel?.assets?.length ? `Known assets: ${intel.assets.join(', ')}.` : 'No known assets.'
     const flagContext = intel?.flags?.length ? `Flags: ${intel.flags.join(', ')}.` : ''
@@ -56,21 +54,50 @@ export async function POST(request) {
       ? `${Math.floor(amountWhole/1000)} thousand ${amountWhole % 1000 > 0 ? 'and ' + (amountWhole % 1000) : ''} pounds`
       : `${amountWhole} pounds`
 
-    // Core instructions for all tones
+    // Key figures for negotiation
+    const minMonthly = Math.ceil(amount / 48)
+    const lumpSum70 = Math.round(amount * 0.7)
+    const lumpSum85 = Math.round(amount * 0.85)
+    const lumpSum90 = Math.round(amount * 0.9)
+
     const coreInstructions = `
 CRITICAL SPEECH RULES:
 - NEVER read numbers digit by digit. Say "five thousand and seventy five pounds" not "five zero seven five point zero zero".
 - NEVER say "point zero zero" or read decimal places for whole amounts.
 - Be conversational and natural. You are a human collections agent, not a robot.
 - Use short sentences. Pause naturally.
+- Do NOT say "Zenith". Always say "Zennith" (short e sound).
 - If they ask who you are: "I'm calling from Zennith Legal Services regarding an outstanding matter."
 - If they get aggressive or threaten you: stay calm, say "I understand this is difficult, but we do need to resolve this matter" and continue.
 - If they say they have a solicitor: say "That's fine, please have your solicitor contact us at settlements@zenithlegalgroup.com" and end the call politely.
 - If they say they are vulnerable or have a disability: say "I understand, I'll make a note and have someone from our team contact you directly to discuss your circumstances" and end the call politely.
 - If they request a callback: confirm the date and time, and say you'll arrange that.
 
+HANDLING PAUSES:
+- If you need a moment to think, say "Bear with me one moment" or "Just making a note of that" or "Let me just check something".
+- NEVER go silent for more than 2 seconds without saying something.
+- Use natural filler while processing: "Right", "OK", "I see", "Understood", "Mm-hm".
+- If the debtor goes quiet, prompt them after 3 seconds: "Are you still there?" or "Hello?"
+
+PAYMENT NEGOTIATION - FOLLOW THIS ORDER:
+1. FULL SETTLEMENT FIRST: "Are you in a position to settle this in full today?"
+2. DISCOUNTED LUMP SUM: If they can't pay full, try: "If you could settle this with a single payment, we could potentially agree a reduced figure. Would you be able to raise a lump sum?"
+   - If they show interest, start at 10% discount: "We could look at accepting ${lumpSum90} pounds as a full and final settlement if paid within 14 days."
+   - If they push back, go to 15%: "I could stretch to ${lumpSum85} pounds, but that would need to be within 14 days."
+   - Absolute maximum discount is 30%: ${lumpSum70} pounds. NEVER go below that.
+   - If they accept a lump sum, confirm: "So that's [amount] as a full and final settlement, paid within 14 days. We'll send you a secure payment link."
+3. MONTHLY PLAN: Only if they can't raise a lump sum at all. Ask: "What could you realistically afford to pay each month?"
+   - Let them give a number first. Don't lead with the minimum.
+   - Calculate how long their offer would take: total divided by their offer = months, convert to years.
+   - If it would take more than 4 years, say: "I appreciate that, but at [amount] a month that would take [X] years to clear. Could you stretch to [higher amount]? That would bring it down to [Y] years which is much more manageable."
+   - The absolute floor is ${minMonthly} pounds per month. Never accept less.
+   - Approach it naturally, not as a rule: "We'd really need at least [minimum] to make meaningful progress on this."
+   - If they genuinely can't afford the minimum: "I understand. Let me make a note and have someone review your circumstances. We'll be in touch."
+4. CONFIRM: Once any payment is agreed, confirm clearly: "So that's [amount] per month starting [date]. We'll send you a secure payment link shortly by text."
+
 AT THE END OF EVERY CALL, you must clearly state the outcome by saying one of these exact phrases:
-- "OUTCOME: PAYMENT_AGREED" if they agreed to pay or set up a payment plan
+- "OUTCOME: PAYMENT_FULL [amount]" if they agreed to pay a lump sum, full or discounted (e.g. "OUTCOME: PAYMENT_FULL 35000")
+- "OUTCOME: PAYMENT_PLAN [monthly_amount]" if they agreed a monthly plan (e.g. "OUTCOME: PAYMENT_PLAN 210")
 - "OUTCOME: CALLBACK_REQUESTED [date/time]" if they asked for a callback (include when)
 - "OUTCOME: DISPUTED" if they dispute the debt
 - "OUTCOME: REFUSED" if they refused to engage
@@ -78,17 +105,24 @@ AT THE END OF EVERY CALL, you must clearly state the outcome by saying one of th
 - "OUTCOME: NO_ANSWER" if nobody picked up
 - "OUTCOME: VULNERABLE" if they indicated vulnerability
 - "OUTCOME: SOLICITOR" if they referenced a solicitor
-Say this outcome phrase right before your final goodbye. The debtor won't notice it but our system needs it.
+IMPORTANT: Always include the NUMBER after PAYMENT_FULL or PAYMENT_PLAN. Just the digits, no currency symbols or commas.
+Say this outcome phrase right before your final goodbye.
 
-The outstanding amount is ${amountSpoken}. The debtor's name is ${debtor.name}. The company is ${debtor.company}.
+CASE DETAILS:
+- Outstanding amount: ${amountSpoken}
+- Maximum discount (30% off): ${lumpSum70} pounds
+- Minimum monthly payment (48 months): ${minMonthly} pounds
+- Debtor name: ${debtor.name}
+- Company: ${debtor.company}
 ${assetContext}
+${flagContext}
 `
 
     // Tone-specific instructions
     const tones = {
-      professional: `You are calling on behalf of Zennith Legal Services regarding an outstanding sum of ${amountSpoken} relating to ${debtor.company}. Be professional and courteous but clear that payment is required. Offer to discuss payment arrangements. If they can't pay in full, suggest instalments. ${coreInstructions}`,
-      firm: `You are calling on behalf of Zennith Legal Services regarding an overdue payment of ${amountSpoken} for ${debtor.company}. Previous correspondence has gone unanswered. Be direct and firm. Make clear that failure to engage will result in escalation. Do not be rude but do not be soft. ${flagContext} ${coreInstructions}`,
-      final: `This is a final call from Zennith Legal Services regarding ${amountSpoken} outstanding for ${debtor.company}. Make clear that legal proceedings are being prepared and this is the last opportunity to settle or propose terms before escalation. Be serious and direct. ${flagContext} ${coreInstructions}`,
+      professional: `You are calling on behalf of Zennith Legal Services regarding an outstanding sum of ${amountSpoken} relating to ${debtor.company}. Be professional and courteous but clear that payment is required. ${coreInstructions}`,
+      firm: `You are calling on behalf of Zennith Legal Services regarding an overdue payment of ${amountSpoken} for ${debtor.company}. Previous correspondence has gone unanswered. Be direct and firm. Make clear that failure to engage will result in escalation. Do not be rude but do not be soft. ${coreInstructions}`,
+      final: `This is a final call from Zennith Legal Services regarding ${amountSpoken} outstanding for ${debtor.company}. Make clear that legal proceedings are being prepared and this is the last opportunity to settle or propose terms before escalation. Be serious and direct. ${coreInstructions}`,
     }
 
     const systemMessage = tones[tone] || tones.professional
@@ -120,7 +154,7 @@ ${assetContext}
           firstMessage: `Hello, am I speaking with ${debtor.name}?`,
           endCallMessage: 'Thank you for your time. Goodbye.',
           maxDurationSeconds: 300,
-          silenceTimeoutSeconds: 15,
+          silenceTimeoutSeconds: 8,
           responseDelaySeconds: 0.5,
           endCallPhrases: ['I want to speak to a solicitor', 'I am going to kill', 'I am vulnerable', 'I have a disability'],
           serverUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/vapi`,
