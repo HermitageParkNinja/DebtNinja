@@ -6,7 +6,7 @@ const getStripe = () => new Stripe(process.env.STRIPE_SECRET_KEY)
 
 export async function POST(request) {
   try {
-    const { debtor_id } = await request.json()
+    const { debtor_id, custom_amount, settlement } = await request.json()
     const stripe = getStripe()
     const supabase = createServerClient()
 
@@ -21,10 +21,8 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Debtor not found' }, { status: 404 })
     }
 
-    // Check if we already have a valid payment link
-    if (debtor.stripe_payment_link_url) {
-      // For CVL debts the amount is fixed, reuse the link
-      // For commercial debts, amount changes daily so we may need a new one
+    // Don't reuse links for settlements - they're a different amount
+    if (!custom_amount && !settlement && debtor.stripe_payment_link_url) {
       if (debtor.type === 'cvl') {
         return NextResponse.json({
           success: true,
@@ -35,10 +33,12 @@ export async function POST(request) {
       }
     }
 
-    // Calculate current amount owed
+    // Calculate amount - use custom amount for settlements, otherwise full amount
     let amount
-    if (debtor.type === 'cvl') {
-      amount = Math.round((debtor.base_amount - debtor.payments) * 100) // Stripe uses pence
+    if (custom_amount) {
+      amount = Math.round(custom_amount * 100)
+    } else if (debtor.type === 'cvl') {
+      amount = Math.round((debtor.base_amount - debtor.payments) * 100)
     } else {
       const now = new Date()
       const invDate = new Date(debtor.invoice_date)
@@ -63,15 +63,8 @@ export async function POST(request) {
 
     const paymentLink = await stripe.paymentLinks.create({
       line_items: [{ price: price.id, quantity: 1 }],
-      metadata: { debtor_id: debtor.id },
-      after_completion: {
-        type: 'redirect',
-        redirect: { url: `${process.env.NEXT_PUBLIC_APP_URL}/payment-confirmed` },
-      },
-      // Enable instalments if amount > £1000
-      ...(amount > 100000 ? {
-        payment_method_types: ['card'],
-      } : {}),
+      metadata: { debtor_id: debtor.id, settlement: settlement ? 'true' : 'false', custom_amount: custom_amount || '' },
+      after_completion: { type: 'hosted_confirmation' },
     })
 
     // Store link on debtor record
