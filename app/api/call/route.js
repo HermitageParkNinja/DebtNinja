@@ -105,8 +105,8 @@ AT THE END OF EVERY CALL, you must clearly state the outcome by saying one of th
 - "OUTCOME: NO_ANSWER" if nobody picked up
 - "OUTCOME: VULNERABLE" if they indicated vulnerability
 - "OUTCOME: SOLICITOR" if they referenced a solicitor
-IMPORTANT: Always include the NUMBER after PAYMENT_FULL or PAYMENT_PLAN. Just the digits, no currency symbols or commas.
-Say this outcome phrase right before your final goodbye.
+IMPORTANT: Always include the NUMBER after PAYMENT_FULL or PAYMENT_PLAN. Just the digits, no currency symbols or commas. Say the number as one word, not digit by digit. For example say "forty two thousand five hundred" not "4 2 5 0 0".
+Say this outcome phrase quickly and naturally right before your final goodbye, like a mental note to yourself.
 
 CASE DETAILS:
 - Outstanding amount: ${amountSpoken}
