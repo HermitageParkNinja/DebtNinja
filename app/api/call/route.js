@@ -158,8 +158,8 @@ const debtContext = debtor.type === 'cvl'
           firstMessage: `Hello, am I speaking with ${debtor.name}?`,
           endCallMessage: 'Thank you for your time. Goodbye.',
           maxDurationSeconds: 300,
-          silenceTimeoutSeconds: 11,
-          responseDelaySeconds: 0.5,
+          silenceTimeoutSeconds: 20,
+          responseDelaySeconds: 0.3,
           endCallPhrases: ['I want to speak to a solicitor', 'I am going to kill', 'I am vulnerable', 'I have a disability'],
           serverUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/vapi`,
           metadata: {
