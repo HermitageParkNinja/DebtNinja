@@ -119,10 +119,14 @@ ${flagContext}
 `
 
     // Tone-specific instructions
+const debtContext = debtor.type === 'cvl'
+      ? `This is a CVL recovery matter. The company ${debtor.company} is in liquidation. You are pursuing the director ${debtor.name} for overdrawn director loan accounts and other claims on behalf of the liquidator. Do NOT mention liquidation directly to the debtor - refer to it as "the outstanding matter" or "the amount owed". The legal basis is Insolvency Act 1986.`
+      : `This is a commercial debt matter. ${debtor.company} owes an unpaid invoice. This is a straightforward contractual debt, nothing to do with liquidation or insolvency. Refer to it as an unpaid invoice or outstanding balance. The legal basis is Late Payment of Commercial Debts Act 1998. Interest is accruing daily.`
+
     const tones = {
-      professional: `You are calling on behalf of Zennith Legal Services regarding an outstanding sum of ${amountSpoken} relating to ${debtor.company}. Be professional and courteous but clear that payment is required. ${coreInstructions}`,
-      firm: `You are calling on behalf of Zennith Legal Services regarding an overdue payment of ${amountSpoken} for ${debtor.company}. Previous correspondence has gone unanswered. Be direct and firm. Make clear that failure to engage will result in escalation. Do not be rude but do not be soft. ${coreInstructions}`,
-      final: `This is a final call from Zennith Legal Services regarding ${amountSpoken} outstanding for ${debtor.company}. Make clear that legal proceedings are being prepared and this is the last opportunity to settle or propose terms before escalation. Be serious and direct. ${coreInstructions}`,
+      professional: `You are calling on behalf of Zennith Legal Services regarding an outstanding sum of ${amountSpoken} relating to ${debtor.company}. Be professional and courteous but clear that payment is required. ${debtContext} ${coreInstructions}`,
+      firm: `You are calling on behalf of Zennith Legal Services regarding an overdue payment of ${amountSpoken} for ${debtor.company}. Previous correspondence has gone unanswered. Be direct and firm. Make clear that failure to engage will result in escalation. Do not be rude but do not be soft. ${debtContext} ${coreInstructions}`,
+      final: `This is a final call from Zennith Legal Services regarding ${amountSpoken} outstanding for ${debtor.company}. Make clear that legal proceedings are being prepared and this is the last opportunity to settle or propose terms before escalation. Be serious and direct. ${debtContext} ${coreInstructions}`,
     }
 
     const systemMessage = tones[tone] || tones.professional
