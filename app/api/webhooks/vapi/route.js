@@ -32,13 +32,13 @@ export async function POST(request) {
 
       if (transcriptText.includes('OUTCOME: PAYMENT_FULL')) {
         outcome = 'payment_full'
-        const match = transcriptText.match(/OUTCOME: PAYMENT_FULL\s+(\d+[\d.,]*)/)
-        if (match) agreedAmount = parseFloat(match[1].replace(/,/g, ''))
+        const match = transcriptText.match(/OUTCOME:?\s*PAYMENT.?FULL\s+(\d[\d.,\s]*)/)
+        if (match) agreedAmount = parseFloat(match[1].replace(/[,\s.]/g, ''))
       }
       else if (transcriptText.includes('OUTCOME: PAYMENT_PLAN')) {
         outcome = 'payment_plan'
-        const match = transcriptText.match(/OUTCOME: PAYMENT_PLAN\s+(\d+[\d.,]*)/)
-        if (match) agreedAmount = parseFloat(match[1].replace(/,/g, ''))
+        const match = transcriptText.match(/OUTCOME:?\s*PAYMENT.?PLAN\s+(\d[\d.,\s]*)/)
+        if (match) agreedAmount = parseFloat(match[1].replace(/[,\s.]/g, ''))
       }
       else if (transcriptText.includes('OUTCOME: PAYMENT_AGREED')) {
         outcome = 'payment_agreed'
