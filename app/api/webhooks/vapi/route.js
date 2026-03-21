@@ -136,11 +136,11 @@ export async function POST(request) {
           if (linkUrl) {
             let msg
             if (type === 'plan') {
-              msg = `Following our conversation, here is your secure payment plan link for £${monthlyAmount}/month as agreed: ${linkUrl} - Zennith Legal Services`
+              msg = `Following our conversation, here is your secure payment plan link for £${monthlyAmount}/month as agreed: ${linkUrl} - Zenith Legal Services Group`
             } else if (fullAmount) {
-              msg = `Following our conversation, here is your secure payment link for the agreed settlement of £${fullAmount.toLocaleString('en-GB')} as discussed: ${linkUrl} - Zennith Legal Services`
+              msg = `Following our conversation, here is your secure payment link for the agreed settlement of £${fullAmount.toLocaleString('en-GB')} as discussed: ${linkUrl} - Zenith Legal Services Group`
             } else {
-              msg = `Following our conversation, here is your secure payment link as agreed: ${linkUrl} - Zennith Legal Services`
+              msg = `Following our conversation, here is your secure payment link as agreed: ${linkUrl} - Zenith Legal Services Group`
             }
 
             // Send via SMS
