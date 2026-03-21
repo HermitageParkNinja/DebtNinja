@@ -30,33 +30,35 @@ export async function POST(request) {
 
       let agreedAmount = null
 
-      if (transcriptText.includes('OUTCOME: PAYMENT_FULL')) {
+   // Normalise transcript for matching - TTS outputs commas not colons
+      const normalised = transcriptText.toLowerCase().replace(/,/g, '').replace(/:/g, '')
+
+      if (normalised.includes('outcome payment full') || normalised.includes('outcome payment_full')) {
         outcome = 'payment_full'
-        const match = transcriptText.match(/OUTCOME:?\s*PAYMENT.?FULL\s+(\d[\d.,\s]*)/)
-        if (match) agreedAmount = parseFloat(match[1].replace(/[,\s.]/g, ''))
+        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Pp]ayment.?[Ff]ull\s+(\d[\d.,\s]*)/i)
+        if (match) agreedAmount = parseFloat(match[1].replace(/[,\s]/g, ''))
       }
-      else if (transcriptText.includes('OUTCOME: PAYMENT_PLAN')) {
+      else if (normalised.includes('outcome payment plan') || normalised.includes('outcome payment_plan')) {
         outcome = 'payment_plan'
-        const match = transcriptText.match(/OUTCOME:?\s*PAYMENT.?PLAN\s+(\d[\d.,\s]*)/)
-        if (match) agreedAmount = parseFloat(match[1].replace(/[,\s.]/g, ''))
+        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Pp]ayment.?[Pp]lan\s+(\d[\d.,\s]*)/i)
+        if (match) agreedAmount = parseFloat(match[1].replace(/[,\s]/g, ''))
       }
-      else if (transcriptText.includes('OUTCOME: PAYMENT_AGREED')) {
+      else if (normalised.includes('outcome payment agreed') || normalised.includes('outcome payment_agreed')) {
         outcome = 'payment_agreed'
-        // Legacy format - try to extract any number near it
-        const match = transcriptText.match(/OUTCOME: PAYMENT_AGREED\s*(\d+[\d.,]*)/)
-        if (match) agreedAmount = parseFloat(match[1].replace(/,/g, ''))
+        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Pp]ayment.?[Aa]greed\s*(\d[\d.,\s]*)?/i)
+        if (match && match[1]) agreedAmount = parseFloat(match[1].replace(/[,\s]/g, ''))
       }
-      else if (transcriptText.includes('OUTCOME: CALLBACK_REQUESTED')) {
+      else if (normalised.includes('outcome callback requested') || normalised.includes('outcome callback_requested')) {
         outcome = 'callback_requested'
-        const match = transcriptText.match(/OUTCOME: CALLBACK_REQUESTED\s*\[?([^\]]*)\]?/)
+        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Cc]allback.?[Rr]equested\s*\[?([^\]\n]*)\]?/i)
         if (match) callbackDate = match[1].trim()
       }
-      else if (transcriptText.includes('OUTCOME: DISPUTED')) outcome = 'disputed'
-      else if (transcriptText.includes('OUTCOME: REFUSED')) outcome = 'refused'
-      else if (transcriptText.includes('OUTCOME: VOICEMAIL')) outcome = 'voicemail'
-      else if (transcriptText.includes('OUTCOME: NO_ANSWER')) outcome = 'no_answer'
-      else if (transcriptText.includes('OUTCOME: VULNERABLE')) outcome = 'vulnerable'
-      else if (transcriptText.includes('OUTCOME: SOLICITOR')) outcome = 'solicitor'
+      else if (normalised.includes('outcome disputed')) outcome = 'disputed'
+      else if (normalised.includes('outcome refused')) outcome = 'refused'
+      else if (normalised.includes('outcome voicemail')) outcome = 'voicemail'
+      else if (normalised.includes('outcome no answer')) outcome = 'no_answer'
+      else if (normalised.includes('outcome vulnerable')) outcome = 'vulnerable'
+      else if (normalised.includes('outcome solicitor')) outcome = 'solicitor'
 
       // Clean transcript - remove the OUTCOME line for display
       const cleanTranscript = transcriptText.replace(/OUTCOME:.*$/gm, '').trim()
