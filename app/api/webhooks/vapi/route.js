@@ -35,12 +35,12 @@ export async function POST(request) {
 
       if (normalised.includes('outcome payment full') || normalised.includes('outcome payment_full')) {
         outcome = 'payment_full'
-        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Pp]ayment.?[Ff]ull\s+(\d[\d.,\s]*)/i)
+        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Pp]ayment.?[Ff]ull[,:.]?\s*(\d[\d.,\s]*)/i)
         if (match) agreedAmount = parseFloat(match[1].replace(/[,\s]/g, ''))
       }
       else if (normalised.includes('outcome payment plan') || normalised.includes('outcome payment_plan')) {
         outcome = 'payment_plan'
-        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Pp]ayment.?[Pp]lan\s+(\d[\d.,\s]*)/i)
+        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Pp]ayment.?[Pp]lan[,:.]?\s*(\d[\d.,\s]*)/i)
         if (match) agreedAmount = parseFloat(match[1].replace(/[,\s]/g, ''))
       }
       else if (normalised.includes('outcome payment agreed') || normalised.includes('outcome payment_agreed')) {
