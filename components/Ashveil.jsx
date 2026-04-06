@@ -784,7 +784,36 @@ const DebtorPanel = ({ debtor, onClose, onRefresh }) => {
               ))}
             </div>
 
-            <button style={{ width: "100%", padding: "9px", background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.15)", borderRadius: 6, color: "#3b82f6", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add More Intelligence</button>
+            <button onClick={() => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.multiple = true;
+              input.accept = '.pdf,.doc,.docx,.txt,.csv,.zip';
+              input.onchange = async (e) => {
+                const files = Array.from(e.target.files || []);
+                if (files.length === 0) return;
+
+                // Upload and extract
+                const formData = new FormData();
+                formData.append('debtor_id', debtor.id);
+                files.forEach(f => formData.append('files', f));
+
+                const uploadRes = await fetch('/api/documents', { method: 'POST', body: formData });
+                const uploadData = await uploadRes.json();
+
+                if (uploadData.extracted_text) {
+                  // Run intelligence
+                  const intelRes = await fetch('/api/intelligence', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ debtor_id: debtor.id, type: debtor.type, documents_text: uploadData.extracted_text }),
+                  });
+                  const intelData = await intelRes.json();
+                  if (!intelData.error && onRefresh) onRefresh();
+                }
+              };
+              input.click();
+            }} style={{ width: "100%", padding: "9px", background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.15)", borderRadius: 6, color: "#3b82f6", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add More Intelligence</button>
           </div>
         )}
 
@@ -1025,6 +1054,7 @@ export default function Ashveil() {
     { id: "dashboard", label: "Dashboard", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
     { id: "debtors", label: "Debtors", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> },
     { id: "sequences", label: "Sequences", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> },
+    { id: "reports", label: "Reports", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> },
     { id: "settings", label: "Settings", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33"/></svg> },
   ];
 
@@ -1236,6 +1266,168 @@ export default function Ashveil() {
               );
             })}
           </div>
+        </div>)}
+
+        {/* REPORTS */}
+        {view === "reports" && (<div>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, marginBottom: 2 }}>Reports</h1>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginBottom: 18 }}>Recovery performance and pipeline analysis</div>
+
+          {/* Top-level stats */}
+          <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
+            <Stat label="Total Book" value={fmt(totalOwed)} />
+            <Stat label="Recovered" value={fmt(totalRecovered)} accent="#10b981" />
+            <Stat label="Recovery Rate" value={totalOwed > 0 ? ((totalRecovered/totalOwed)*100).toFixed(1) + "%" : "0%"} accent="#10b981" />
+            <Stat label="Active Cases" value={debtors.filter(d => ["queued","active","responding","negotiating"].includes(d.status)).length} accent="#3b82f6" />
+          </div>
+
+          {/* Recovery by Client */}
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--mono)", marginBottom: 10 }}>Recovery by Client</h3>
+            <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, overflow: "hidden" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr 0.8fr", padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: 8, color: "rgba(255,255,255,0.2)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--mono)" }}>
+                <div>Client</div><div>Assigned</div><div>Recovered</div><div>Outstanding</div><div>Rate</div>
+              </div>
+              {clients.map(c => {
+                const clientDebtors = debtors.filter(d => d.client === c.id);
+                if (clientDebtors.length === 0) return null;
+                const assigned = clientDebtors.reduce((s, d) => s + calcTotalOwed(d), 0);
+                const recovered = clientDebtors.reduce((s, d) => s + d.payments, 0);
+                const rate = assigned > 0 ? ((recovered / assigned) * 100).toFixed(1) : "0.0";
+                return (
+                  <div key={c.id} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr 0.8fr", padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.02)", fontSize: 11 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div style={{ width: 6, height: 6, borderRadius: 3, background: c.color }} /><span style={{ fontWeight: 600 }}>{c.name}</span><span style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>({clientDebtors.length})</span></div>
+                    <div style={{ fontFamily: "var(--mono)", color: "rgba(255,255,255,0.5)" }}>{fmt(assigned)}</div>
+                    <div style={{ fontFamily: "var(--mono)", color: "#10b981" }}>{fmt(recovered)}</div>
+                    <div style={{ fontFamily: "var(--mono)", color: "#ef4444" }}>{fmt(assigned - recovered)}</div>
+                    <div><Bar value={recovered} max={Math.max(assigned, 1)} color="#10b981" h={4} /><span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", fontFamily: "var(--mono)" }}>{rate}%</span></div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Pipeline by Status */}
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--mono)", marginBottom: 10 }}>Pipeline Breakdown</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+              {Object.entries(STATUS_CFG).map(([key, cfg]) => {
+                const count = debtors.filter(d => d.status === key).length;
+                const value = debtors.filter(d => d.status === key).reduce((s, d) => s + calcTotalOwed(d), 0);
+                return (
+                  <div key={key} style={{ background: cfg.bg, border: `1px solid ${cfg.color}15`, borderRadius: 8, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 9, color: cfg.color, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>{cfg.label}</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "var(--mono)", color: "#fff" }}>{count}</div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontFamily: "var(--mono)", marginTop: 2 }}>{fmt(value)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Channel Performance */}
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--mono)", marginBottom: 10 }}>Channel Performance</h3>
+            <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, overflow: "hidden" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 0.8fr 0.8fr 0.8fr 1fr", padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: 8, color: "rgba(255,255,255,0.2)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--mono)" }}>
+                <div>Channel</div><div>Sent</div><div>Engaged</div><div>Rate</div><div>Performance</div>
+              </div>
+              {Object.entries(channelStats).map(([ch, s]) => {
+                const cfg = CHANNELS[ch];
+                if (!cfg) return null;
+                const rate = s.sent > 0 ? ((s.engaged / s.sent) * 100).toFixed(0) : "0";
+                return (
+                  <div key={ch} style={{ display: "grid", gridTemplateColumns: "1fr 0.8fr 0.8fr 0.8fr 1fr", padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.02)", fontSize: 11 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}><span>{cfg.icon}</span><span style={{ fontWeight: 600, color: cfg.color }}>{cfg.label}</span></div>
+                    <div style={{ fontFamily: "var(--mono)", color: "rgba(255,255,255,0.4)" }}>{s.sent}</div>
+                    <div style={{ fontFamily: "var(--mono)", color: "#10b981" }}>{s.engaged}</div>
+                    <div style={{ fontFamily: "var(--mono)", color: "rgba(255,255,255,0.5)" }}>{rate}%</div>
+                    <div><Bar value={s.engaged} max={Math.max(s.sent, 1)} color={cfg.color} h={4} /></div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Debt Type Split */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+            {[["cvl", "CVL Recovery", "#a855f7"], ["commercial", "Commercial Debt", "#3b82f6"]].map(([type, label, color]) => {
+              const typeDebtors = debtors.filter(d => d.type === type);
+              const assigned = typeDebtors.reduce((s, d) => s + calcTotalOwed(d), 0);
+              const recovered = typeDebtors.reduce((s, d) => s + d.payments, 0);
+              const rate = assigned > 0 ? ((recovered / assigned) * 100).toFixed(1) : "0.0";
+              return (
+                <div key={type} style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, padding: "14px 16px" }}>
+                  <div style={{ fontSize: 10, color: color, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>{label}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <div><div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>Cases</div><div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--mono)" }}>{typeDebtors.length}</div></div>
+                    <div><div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>Assigned</div><div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--mono)" }}>{fmt(assigned)}</div></div>
+                    <div><div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>Recovered</div><div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--mono)", color: "#10b981" }}>{fmt(recovered)}</div></div>
+                    <div><div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>Rate</div><div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--mono)" }}>{rate}%</div></div>
+                  </div>
+                  <div style={{ marginTop: 8 }}><Bar value={recovered} max={Math.max(assigned, 1)} color={color} h={5} /></div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Top Debtors by Outstanding */}
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--mono)", marginBottom: 10 }}>Top Debtors by Outstanding</h3>
+            <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, overflow: "hidden" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 0.8fr 0.8fr 1fr", padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: 8, color: "rgba(255,255,255,0.2)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--mono)" }}>
+                <div>Company</div><div>Outstanding</div><div>Paid</div><div>Status</div><div>Days</div>
+              </div>
+              {[...debtors].sort((a, b) => calcTotalOwed(b) - calcTotalOwed(a)).slice(0, 15).map(d => {
+                const st = STATUS_CFG[d.status];
+                const owed = calcTotalOwed(d);
+                return (
+                  <div key={d.id} onClick={() => { setSelected(d); setView("debtors"); }} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 0.8fr 0.8fr 1fr", padding: "9px 12px", borderBottom: "1px solid rgba(255,255,255,0.02)", cursor: "pointer", fontSize: 11 }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  >
+                    <div><span style={{ fontWeight: 600 }}>{d.company}</span><div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>{d.name}</div></div>
+                    <div style={{ fontFamily: "var(--mono)", fontWeight: 600, color: "#ef4444" }}>{fmt(owed)}</div>
+                    <div style={{ fontFamily: "var(--mono)", color: "#10b981" }}>{d.payments > 0 ? fmt(d.payments) : "-"}</div>
+                    <div><Badge label={st.label} color={st.color} bg={st.bg} /></div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>Day {d.seqDay} {d.nextAction ? `- ${d.nextAction}` : ""}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Call Outcomes Summary */}
+          {(() => {
+            const callOutcomes = {};
+            debtors.forEach(d => {
+              (d.timeline || []).filter(t => t.channel === "call" && t.result && t.result !== "initiated").forEach(t => {
+                const r = (t.result || "completed").replace(/_/g, " ");
+                callOutcomes[r] = (callOutcomes[r] || 0) + 1;
+              });
+            });
+            const total = Object.values(callOutcomes).reduce((s, v) => s + v, 0);
+            if (total === 0) return null;
+            return (
+              <div style={{ marginBottom: 20 }}>
+                <h3 style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--mono)", marginBottom: 10 }}>Call Outcomes ({total} calls)</h3>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {Object.entries(callOutcomes).sort((a, b) => b[1] - a[1]).map(([outcome, count]) => {
+                    const pct = ((count / total) * 100).toFixed(0);
+                    const color = outcome.includes("payment") ? "#10b981" : outcome.includes("disput") ? "#ef4444" : outcome.includes("vulnera") ? "#f59e0b" : "#3b82f6";
+                    return (
+                      <div key={outcome} style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, padding: "10px 14px", minWidth: 120 }}>
+                        <div style={{ fontSize: 9, color: color, fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{outcome}</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--mono)" }}>{count}</div>
+                        <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>{pct}% of calls</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
         </div>)}
 
         {/* SETTINGS */}
