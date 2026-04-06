@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
-import { parseCallbackDate } from '@/lib/parseCallback'
+import { parseCallbackDate } from '../../../../lib/parseCallback'
  
 export async function POST(request) {
   try {
