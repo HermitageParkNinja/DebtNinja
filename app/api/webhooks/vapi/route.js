@@ -1,68 +1,67 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
-
+import { parseCallbackDate } from '@/lib/parseCallback'
+ 
 export async function POST(request) {
   try {
     const body = await request.json()
     const supabase = createServerClient()
-
+ 
     const eventType = body.message?.type || body.type
     const call = body.message?.call || body.call || {}
     const metadata = call.assistant?.metadata || call.metadata || {}
     const debtorId = metadata.debtor_id
-
+ 
     if (!debtorId) {
       // Not one of our calls or missing metadata
       return NextResponse.json({ received: true })
     }
-
+ 
     // ── Call ended - main event we care about ──
     if (eventType === 'end-of-call-report' || eventType === 'call.ended') {
       const transcript = body.message?.transcript || body.transcript || ''
       const recordingUrl = body.message?.recordingUrl || body.recordingUrl || call.recordingUrl || ''
       const duration = body.message?.duration || body.duration || call.duration || 0
       const summary = body.message?.summary || body.summary || ''
-
+ 
       // Parse outcome from transcript
       let outcome = 'completed'
       let callbackDate = null
       const transcriptText = typeof transcript === 'string' ? transcript : JSON.stringify(transcript)
-
+ 
       let agreedAmount = null
-
-   // Normalise transcript for matching - TTS outputs commas not colons
-      const normalised = transcriptText.toLowerCase().replace(/,/g, '').replace(/:/g, '')
-
-      if (normalised.includes('outcome payment full') || normalised.includes('outcome payment_full')) {
+ 
+      if (transcriptText.includes('OUTCOME: PAYMENT_FULL')) {
         outcome = 'payment_full'
-        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Pp]ayment.?[Ff]ull[,:.]?\s*(\d[\d.,\s]*)/i)
-        if (match) agreedAmount = parseFloat(match[1].replace(/[,\s]/g, ''))
+        const match = transcriptText.match(/OUTCOME: PAYMENT_FULL\s+(\d+[\d.,]*)/)
+        if (match) agreedAmount = parseFloat(match[1].replace(/,/g, ''))
       }
-      else if (normalised.includes('outcome payment plan') || normalised.includes('outcome payment_plan')) {
+      else if (transcriptText.includes('OUTCOME: PAYMENT_PLAN')) {
         outcome = 'payment_plan'
-        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Pp]ayment.?[Pp]lan[,:.]?\s*(\d[\d.,\s]*)/i)
-        if (match) agreedAmount = parseFloat(match[1].replace(/[,\s]/g, ''))
+        const match = transcriptText.match(/OUTCOME: PAYMENT_PLAN\s+(\d+[\d.,]*)/)
+        if (match) agreedAmount = parseFloat(match[1].replace(/,/g, ''))
       }
-      else if (normalised.includes('outcome payment agreed') || normalised.includes('outcome payment_agreed')) {
+      else if (transcriptText.includes('OUTCOME: PAYMENT_AGREED')) {
         outcome = 'payment_agreed'
-        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Pp]ayment.?[Aa]greed\s*(\d[\d.,\s]*)?/i)
-        if (match && match[1]) agreedAmount = parseFloat(match[1].replace(/[,\s]/g, ''))
+        // Legacy format - try to extract any number near it
+        const match = transcriptText.match(/OUTCOME: PAYMENT_AGREED\s*(\d+[\d.,]*)/)
+        if (match) agreedAmount = parseFloat(match[1].replace(/,/g, ''))
       }
-      else if (normalised.includes('outcome callback requested') || normalised.includes('outcome callback_requested')) {
+      else if (transcriptText.includes('OUTCOME: CALLBACK_REQUESTED')) {
         outcome = 'callback_requested'
-        const match = transcriptText.match(/[Oo]utcome[,:.]?\s*[Cc]allback.?[Rr]equested\s*\[?([^\]\n]*)\]?/i)
+        const match = transcriptText.match(/OUTCOME: CALLBACK_REQUESTED\s*\[?([^\]]*)\]?/)
         if (match) callbackDate = match[1].trim()
       }
-      else if (normalised.includes('outcome disputed')) outcome = 'disputed'
-      else if (normalised.includes('outcome refused')) outcome = 'refused'
-      else if (normalised.includes('outcome voicemail')) outcome = 'voicemail'
-      else if (normalised.includes('outcome no answer')) outcome = 'no_answer'
-      else if (normalised.includes('outcome vulnerable')) outcome = 'vulnerable'
-      else if (normalised.includes('outcome solicitor')) outcome = 'solicitor'
-
+      else if (transcriptText.includes('OUTCOME: DISPUTED')) outcome = 'disputed'
+      else if (transcriptText.includes('OUTCOME: REFUSED')) outcome = 'refused'
+      else if (transcriptText.includes('OUTCOME: VOICEMAIL')) outcome = 'voicemail'
+      else if (transcriptText.includes('OUTCOME: NO_ANSWER')) outcome = 'no_answer'
+      else if (transcriptText.includes('OUTCOME: VULNERABLE')) outcome = 'vulnerable'
+      else if (transcriptText.includes('OUTCOME: SOLICITOR')) outcome = 'solicitor'
+ 
       // Clean transcript - remove the OUTCOME line for display
       const cleanTranscript = transcriptText.replace(/OUTCOME:.*$/gm, '').trim()
-
+ 
       // Build summary based on outcome
       const amountStr = agreedAmount ? `£${agreedAmount.toLocaleString('en-GB', { minimumFractionDigits: 2 })}` : ''
       const outcomeSummaries = {
@@ -78,7 +77,7 @@ export async function POST(request) {
         solicitor: 'Debtor referenced solicitor - details provided - HUMAN REVIEW REQUIRED',
         completed: 'Call completed',
       }
-
+ 
       // Log to timeline
       await supabase.from('timeline').insert({
         debtor_id: debtorId,
@@ -98,16 +97,16 @@ export async function POST(request) {
         },
         executed_at: new Date().toISOString(),
       })
-
+ 
       // Update debtor based on outcome
       const updates = { last_contact: new Date().toISOString() }
       const BASE_URL = process.env.NEXT_PUBLIC_APP_URL
-
+ 
       // Auto-create payment plan or full payment link
       async function autoSendPaymentLink(type, monthlyAmount, fullAmount) {
         try {
           let linkUrl = null
-
+ 
           if (type === 'plan' && monthlyAmount) {
             // Create instalment plan
             const planRes = await fetch(`${BASE_URL}/api/payment-plan`, {
@@ -132,31 +131,31 @@ export async function POST(request) {
             const stripeData = await stripeRes.json()
             linkUrl = stripeData.payment_link
           }
-
+ 
           if (linkUrl) {
             let msg
             if (type === 'plan') {
-              msg = `Following our conversation, here is your secure payment plan link for £${monthlyAmount}/month as agreed: ${linkUrl} - Zenith Legal Services Group`
+              msg = `Following our conversation, here is your secure payment plan link for £${monthlyAmount}/month as agreed: ${linkUrl} - Zennith Legal Services`
             } else if (fullAmount) {
-              msg = `Following our conversation, here is your secure payment link for the agreed settlement of £${fullAmount.toLocaleString('en-GB')} as discussed: ${linkUrl} - Zenith Legal Services Group`
+              msg = `Following our conversation, here is your secure payment link for the agreed settlement of £${fullAmount.toLocaleString('en-GB')} as discussed: ${linkUrl} - Zennith Legal Services`
             } else {
-              msg = `Following our conversation, here is your secure payment link as agreed: ${linkUrl} - Zenith Legal Services Group`
+              msg = `Following our conversation, here is your secure payment link as agreed: ${linkUrl} - Zennith Legal Services`
             }
-
+ 
             // Send via SMS
             await fetch(`${BASE_URL}/api/sms`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ debtor_id: debtorId, channel: 'sms', custom_message: msg }),
             })
-
+ 
             // Also send via email
             await fetch(`${BASE_URL}/api/email`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ debtor_id: debtorId, template: 'payment_plan_confirmation' }),
             })
-
+ 
             return linkUrl
           }
         } catch (e) {
@@ -164,7 +163,7 @@ export async function POST(request) {
         }
         return null
       }
-
+ 
       if (outcome === 'payment_full') {
         updates.status = 'negotiating'
         // Check if the agreed amount is less than full - if so, it's a settlement
@@ -189,14 +188,14 @@ export async function POST(request) {
             ? `Settlement £${agreedAmount.toLocaleString('en-GB')} link sent via SMS and email`
             : 'Full payment link sent via SMS and email'
         }
-
+ 
       } else if (outcome === 'payment_plan' && agreedAmount) {
         updates.status = 'payment_plan'
         updates.next_action = `Plan agreed: £${agreedAmount}/month - generating Stripe link`
         updates.sequence_paused = true
         const link = await autoSendPaymentLink('plan', agreedAmount)
         if (link) updates.next_action = `£${agreedAmount}/month plan link sent via SMS and email`
-
+ 
       } else if (outcome === 'payment_agreed') {
         // Legacy or amount not extracted - generate standard link
         updates.status = 'negotiating'
@@ -208,20 +207,22 @@ export async function POST(request) {
           const link = await autoSendPaymentLink('full')
           if (link) updates.next_action = 'Payment link sent via SMS and email'
         }
-
+ 
       } else if (outcome === 'callback_requested') {
-        updates.next_action = `Callback requested${callbackDate ? ': ' + callbackDate : ''}`
-        // Schedule the callback in timeline
-        if (callbackDate) {
-          await supabase.from('timeline').insert({
-            debtor_id: debtorId,
-            channel: 'call',
-            direction: 'out',
-            status: 'scheduled',
-            summary: `Scheduled callback: ${callbackDate}`,
-            metadata: { callback_date: callbackDate, auto_scheduled: true },
-          })
-        }
+        const scheduledAt = callbackDate ? parseCallbackDate(callbackDate) : null
+        const scheduledDisplay = scheduledAt ? new Date(scheduledAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : callbackDate || 'no time specified'
+        updates.next_action = `Callback scheduled: ${scheduledDisplay}`
+        updates.sequence_paused = true // Pause sequence while waiting for callback
+ 
+        await supabase.from('timeline').insert({
+          debtor_id: debtorId,
+          channel: 'call',
+          direction: 'out',
+          status: 'scheduled',
+          summary: `Callback scheduled: ${scheduledDisplay}`,
+          metadata: { callback_date: callbackDate, parsed_date: scheduledAt, auto_scheduled: true },
+          scheduled_at: scheduledAt || null,
+        })
       } else if (outcome === 'disputed') {
         updates.status = 'disputed'
         updates.sequence_paused = true
@@ -236,10 +237,10 @@ export async function POST(request) {
       } else if (outcome === 'refused') {
         updates.next_action = 'Refused to engage - continue sequence'
       }
-
+ 
       await supabase.from('debtors').update(updates).eq('id', debtorId)
     }
-
+ 
     // ── Status updates during call ──
     if (eventType === 'status-update' || eventType === 'call.status') {
       const status = body.message?.status || body.status
@@ -249,7 +250,7 @@ export async function POST(request) {
         }).eq('id', debtorId)
       }
     }
-
+ 
     return NextResponse.json({ received: true })
   } catch (error) {
     console.error('Vapi webhook error:', error)
