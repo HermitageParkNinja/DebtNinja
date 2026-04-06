@@ -69,7 +69,7 @@ const SEQUENCES = {
 const calcLiveAmount = (d) => {
   if (d.type === "cvl") return d.baseAmount - d.payments;
   // Commercial: principal + daily interest from invoice date
-  const now = new Date("2026-03-19");
+  const now = new Date();
   const inv = new Date(d.invoiceDate + "T00:00:00");
   const days = Math.max(0, Math.floor((now - inv) / 86400000));
   const total = d.principal + (d.dailyInterest * days);
@@ -78,7 +78,7 @@ const calcLiveAmount = (d) => {
 
 const calcTotalOwed = (d) => {
   if (d.type === "cvl") return d.baseAmount;
-  const now = new Date("2026-03-19");
+  const now = new Date();
   const inv = new Date(d.invoiceDate + "T00:00:00");
   const days = Math.max(0, Math.floor((now - inv) / 86400000));
   return d.principal + (d.dailyInterest * days);
@@ -97,7 +97,7 @@ function normalizeDebtor(d) {
   return {
     id: d.id, type: d.type, client: d.client_id, name: d.name, company: d.company,
     coNumber: d.co_number, baseAmount: parseFloat(d.base_amount) || 0,
-    principal: parseFloat(d.principal) || 0, dailyInterest: parseFloat(d.daily_interest) || 0,
+    principal: parseFloat(d.principal) || 0, dailyInterest: parseFloat(d.daily_interest) || 79,
     invoiceDate: d.invoice_date, status: d.status, priority: d.priority,
     seqDay: d.sequence_day || 0, lastContact: d.last_contact || "N/A",
     nextAction: d.next_action || "Queued", payments: parseFloat(d.payments) || 0,
@@ -147,7 +147,7 @@ const Stat = ({ label, value, sub, accent }) => (
 const AddDebtorModal = ({ onClose, onAdd }) => {
   const [step, setStep] = useState(1);
   const [debtType, setDebtType] = useState(null); // "cvl" or "commercial"
-  const [form, setForm] = useState({ client: "", name: "", company: "", coNumber: "", email: "", phone: "", address: "", principal: "", invoiceDate: "", dailyInterest: "" });
+  const [form, setForm] = useState({ client: "", name: "", company: "", coNumber: "", email: "", phone: "", address: "", principal: "", invoiceDate: "", dailyInterest: "79" });
   const [docs, setDocs] = useState([]);
   const [realFiles, setRealFiles] = useState([]); // actual File objects
   const [processing, setProcessing] = useState(false);
@@ -256,7 +256,7 @@ const AddDebtorModal = ({ onClose, onAdd }) => {
         });
       } else {
         const principal = analysis.principal || parseFloat(form.principal) || 0;
-        const dailyRate = analysis.daily_interest || parseFloat(form.dailyInterest) || 0;
+        const dailyRate = analysis.daily_interest || parseFloat(form.dailyInterest) || 79;
         const invDate = analysis.invoice_date || form.invoiceDate || new Date().toISOString().split("T")[0];
         const days = Math.max(0, Math.floor((new Date() - new Date(invDate + "T00:00:00")) / 86400000));
         setAiResult({
@@ -357,15 +357,15 @@ const AddDebtorModal = ({ onClose, onAdd }) => {
                   {debtType === "commercial" && (<>
                     <div><label style={lbl}>Principal Amount (£)</label><input style={inp} type="number" value={form.principal} onChange={e => upd("principal", e.target.value)} placeholder="0.00" /></div>
                     <div><label style={lbl}>Invoice Date</label><input style={inp} type="date" value={form.invoiceDate} onChange={e => upd("invoiceDate", e.target.value)} /></div>
-                    <div><label style={lbl}>Daily Interest (£)</label><input style={inp} type="number" value={form.dailyInterest} onChange={e => upd("dailyInterest", e.target.value)} placeholder="00.00" /></div>
+                    <div><label style={lbl}>Daily Interest (£)</label><input style={inp} type="number" value={form.dailyInterest} onChange={e => upd("dailyInterest", e.target.value)} placeholder="79.00" /></div>
                     <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 2 }}>
                       {form.principal && form.invoiceDate && (
                         <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: 6, padding: "8px 12px", width: "100%" }}>
                           <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", fontFamily: "var(--mono)" }}>LIVE TOTAL TODAY</div>
                           <div style={{ fontSize: 18, fontWeight: 700, color: "#ef4444", fontFamily: "var(--mono)" }}>
-                            {fmt((parseFloat(form.principal) || 0) + ((parseFloat(form.dailyInterest) || 0) * Math.max(0, Math.floor((new Date("2026-03-19") - new Date(form.invoiceDate + "T00:00:00")) / 86400000))))}
+                            {fmt((parseFloat(form.principal) || 0) + ((parseFloat(form.dailyInterest) || 79) * Math.max(0, Math.floor((new Date() - new Date(form.invoiceDate + "T00:00:00")) / 86400000))))}
                           </div>
-                          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>+{fmt(parseFloat(form.dailyInterest) || 0)}/day</div>
+                          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>+{fmt(parseFloat(form.dailyInterest) || 79)}/day</div>
                         </div>
                       )}
                     </div>
@@ -517,7 +517,7 @@ const AddDebtorModal = ({ onClose, onAdd }) => {
                     type: debtType, ...form,
                     baseAmount: debtType === "cvl" && aiResult ? aiResult.totalRecoverable : undefined,
                     principal: debtType === "commercial" && aiResult ? aiResult.principal : parseFloat(form.principal) || 0,
-                    dailyInterest: debtType === "commercial" && aiResult ? aiResult.dailyInterest : parseFloat(form.dailyInterest) || 0,
+                    dailyInterest: debtType === "commercial" && aiResult ? aiResult.dailyInterest : parseFloat(form.dailyInterest) || 79,
                     invoiceDate: debtType === "commercial" && aiResult ? aiResult.invoiceDate : form.invoiceDate,
                     priority: aiResult ? aiResult.suggestedPriority : "medium",
                     intel: aiResult,
@@ -977,7 +977,7 @@ export default function Ashveil() {
       address: data.address,
       base_amount: data.baseAmount || 0,
       principal: data.principal || 0,
-      daily_interest: data.dailyInterest || 0,
+      daily_interest: data.dailyInterest || 79,
       invoice_date: data.invoiceDate || null,
       priority: data.priority || "medium",
     });
@@ -1260,7 +1260,7 @@ export default function Ashveil() {
               { l: "Claude API (Intelligence)", v: health.anthropic ? "Connected" : "Not configured", st: health.anthropic ? "live" : "off", a: "Configure" },
             ]},
             { s: "Commercial Defaults", items: [
-              { l: "Default Daily Interest", v: "Not set", a: "Edit" },
+              { l: "Default Daily Interest", v: "£79.00/day", a: "Edit" },
               { l: "Interest Basis", v: "Late Payment of Commercial Debts Act 1998", a: "Edit" },
               { l: "Auto-update Stripe links", v: "Enabled (recalculates daily)", a: "Toggle" },
             ]},
@@ -1312,3 +1312,4 @@ export default function Ashveil() {
     </div>
   );
 }
+
