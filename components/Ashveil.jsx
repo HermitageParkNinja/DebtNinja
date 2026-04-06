@@ -97,7 +97,7 @@ function normalizeDebtor(d) {
   return {
     id: d.id, type: d.type, client: d.client_id, name: d.name, company: d.company,
     coNumber: d.co_number, baseAmount: parseFloat(d.base_amount) || 0,
-    principal: parseFloat(d.principal) || 0, dailyInterest: parseFloat(d.daily_interest) || 79,
+    principal: parseFloat(d.principal) || 0, dailyInterest: parseFloat(d.daily_interest) || 0,
     invoiceDate: d.invoice_date, status: d.status, priority: d.priority,
     seqDay: d.sequence_day || 0, lastContact: d.last_contact || "N/A",
     nextAction: d.next_action || "Queued", payments: parseFloat(d.payments) || 0,
@@ -147,7 +147,7 @@ const Stat = ({ label, value, sub, accent }) => (
 const AddDebtorModal = ({ onClose, onAdd }) => {
   const [step, setStep] = useState(1);
   const [debtType, setDebtType] = useState(null); // "cvl" or "commercial"
-  const [form, setForm] = useState({ client: "", name: "", company: "", coNumber: "", email: "", phone: "", address: "", principal: "", invoiceDate: "", dailyInterest: "79" });
+  const [form, setForm] = useState({ client: "", name: "", company: "", coNumber: "", email: "", phone: "", address: "", principal: "", invoiceDate: "", dailyInterest: "" });
   const [docs, setDocs] = useState([]);
   const [realFiles, setRealFiles] = useState([]); // actual File objects
   const [processing, setProcessing] = useState(false);
@@ -256,7 +256,7 @@ const AddDebtorModal = ({ onClose, onAdd }) => {
         });
       } else {
         const principal = analysis.principal || parseFloat(form.principal) || 0;
-        const dailyRate = analysis.daily_interest || parseFloat(form.dailyInterest) || 79;
+        const dailyRate = analysis.daily_interest || parseFloat(form.dailyInterest) || 0;
         const invDate = analysis.invoice_date || form.invoiceDate || new Date().toISOString().split("T")[0];
         const days = Math.max(0, Math.floor((new Date() - new Date(invDate + "T00:00:00")) / 86400000));
         setAiResult({
@@ -357,15 +357,15 @@ const AddDebtorModal = ({ onClose, onAdd }) => {
                   {debtType === "commercial" && (<>
                     <div><label style={lbl}>Principal Amount (£)</label><input style={inp} type="number" value={form.principal} onChange={e => upd("principal", e.target.value)} placeholder="0.00" /></div>
                     <div><label style={lbl}>Invoice Date</label><input style={inp} type="date" value={form.invoiceDate} onChange={e => upd("invoiceDate", e.target.value)} /></div>
-                    <div><label style={lbl}>Daily Interest (£)</label><input style={inp} type="number" value={form.dailyInterest} onChange={e => upd("dailyInterest", e.target.value)} placeholder="79.00" /></div>
+                    <div><label style={lbl}>Daily Interest (£)</label><input style={inp} type="number" value={form.dailyInterest} onChange={e => upd("dailyInterest", e.target.value)} placeholder="0.00" /></div>
                     <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 2 }}>
                       {form.principal && form.invoiceDate && (
                         <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: 6, padding: "8px 12px", width: "100%" }}>
                           <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", fontFamily: "var(--mono)" }}>LIVE TOTAL TODAY</div>
                           <div style={{ fontSize: 18, fontWeight: 700, color: "#ef4444", fontFamily: "var(--mono)" }}>
-                            {fmt((parseFloat(form.principal) || 0) + ((parseFloat(form.dailyInterest) || 79) * Math.max(0, Math.floor((new Date() - new Date(form.invoiceDate + "T00:00:00")) / 86400000))))}
+                            {fmt((parseFloat(form.principal) || 0) + ((parseFloat(form.dailyInterest) || 0) * Math.max(0, Math.floor((new Date() - new Date(form.invoiceDate + "T00:00:00")) / 86400000))))}
                           </div>
-                          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>+{fmt(parseFloat(form.dailyInterest) || 79)}/day</div>
+                          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>+{fmt(parseFloat(form.dailyInterest) || 0)}/day</div>
                         </div>
                       )}
                     </div>
@@ -517,7 +517,7 @@ const AddDebtorModal = ({ onClose, onAdd }) => {
                     type: debtType, ...form,
                     baseAmount: debtType === "cvl" && aiResult ? aiResult.totalRecoverable : undefined,
                     principal: debtType === "commercial" && aiResult ? aiResult.principal : parseFloat(form.principal) || 0,
-                    dailyInterest: debtType === "commercial" && aiResult ? aiResult.dailyInterest : parseFloat(form.dailyInterest) || 79,
+                    dailyInterest: debtType === "commercial" && aiResult ? aiResult.dailyInterest : parseFloat(form.dailyInterest) || 0,
                     invoiceDate: debtType === "commercial" && aiResult ? aiResult.invoiceDate : form.invoiceDate,
                     priority: aiResult ? aiResult.suggestedPriority : "medium",
                     intel: aiResult,
@@ -820,21 +820,84 @@ const DebtorPanel = ({ debtor, onClose, onRefresh }) => {
         {tab === "contact" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
-              { i: "✉", l: "Email", v: debtor.email },
-              { i: "📞", l: "Phone", v: debtor.phone },
-              { i: "📍", l: "Address", v: debtor.address },
-              { i: "🏢", l: "Company No.", v: debtor.coNumber },
+              { i: "✉", l: "Email", k: "email", v: debtor.email },
+              { i: "📞", l: "Phone", k: "phone", v: debtor.phone },
+              { i: "📍", l: "Address", k: "address", v: debtor.address },
+              { i: "🏢", l: "Company No.", k: "co_number", v: debtor.coNumber },
             ].map((f, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, padding: "8px 10px", background: "rgba(255,255,255,0.02)", borderRadius: 6 }}>
+              <div key={i} style={{ display: "flex", gap: 8, padding: "8px 10px", background: "rgba(255,255,255,0.02)", borderRadius: 6, alignItems: "center" }}>
                 <span style={{ fontSize: 12 }}>{f.i}</span>
-                <div><div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", textTransform: "uppercase" }}>{f.l}</div><div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginTop: 1 }}>{f.v}</div></div>
+                <div style={{ flex: 1 }}><div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", textTransform: "uppercase" }}>{f.l}</div><div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginTop: 1 }}>{f.v || "Not set"}</div></div>
+                <button onClick={async () => {
+                  const val = prompt(`Update ${f.l}:`, f.v || "");
+                  if (val !== null) {
+                    const { createBrowserClient } = await import("@/lib/supabase");
+                    const sb = createBrowserClient();
+                    await sb.from("debtors").update({ [f.k]: val }).eq("id", debtor.id);
+                    if (onRefresh) onRefresh();
+                  }
+                }} style={{ padding: "3px 7px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 4, color: "rgba(255,255,255,0.25)", cursor: "pointer", fontSize: 8 }}>Edit</button>
               </div>
             ))}
+
+            {/* Notes */}
+            <div style={{ marginTop: 8, background: "rgba(255,255,255,0.02)", borderRadius: 8, padding: 12, border: "1px solid rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--mono)", marginBottom: 6 }}>Add Note</div>
+              <textarea id="debtor-note" placeholder="e.g. Spoke to wife, he's away until Friday..." style={{ width: "100%", padding: "8px 10px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 6, color: "#fff", fontSize: 11, outline: "none", resize: "vertical", minHeight: 60, boxSizing: "border-box", fontFamily: "var(--body)" }} />
+              <button onClick={async () => {
+                const note = document.getElementById("debtor-note")?.value?.trim();
+                if (!note) return;
+                const { createBrowserClient } = await import("@/lib/supabase");
+                const sb = createBrowserClient();
+                await sb.from("timeline").insert({
+                  debtor_id: debtor.id,
+                  channel: "system",
+                  direction: "out",
+                  status: "sent",
+                  result: "note",
+                  summary: note,
+                  executed_at: new Date().toISOString(),
+                });
+                document.getElementById("debtor-note").value = "";
+                if (onRefresh) onRefresh();
+              }} style={{ marginTop: 6, padding: "7px 14px", background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.15)", borderRadius: 5, color: "#3b82f6", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Save Note</button>
+            </div>
           </div>
         )}
 
         {tab === "actions" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {/* Update Balance */}
+            <div style={{ background: "rgba(239,68,68,0.04)", border: "1px solid rgba(239,68,68,0.1)", borderRadius: 8, padding: 12, marginBottom: 4 }}>
+              <div style={{ fontSize: 10, color: "#ef4444", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>Update Balance</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", marginBottom: 3 }}>{debtor.type === "cvl" ? "Base Amount (£)" : "Principal (£)"}</div>
+                  <input id="bal-amount" type="number" defaultValue={debtor.type === "cvl" ? debtor.baseAmount : debtor.principal} style={{ width: "100%", padding: "7px 8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 5, color: "#fff", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
+                </div>
+                {debtor.type === "commercial" && (
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", marginBottom: 3 }}>Daily Interest (£)</div>
+                    <input id="bal-interest" type="number" defaultValue={debtor.dailyInterest} style={{ width: "100%", padding: "7px 8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 5, color: "#fff", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
+                  </div>
+                )}
+              </div>
+              <button onClick={async () => {
+                const amt = parseFloat(document.getElementById("bal-amount")?.value);
+                if (isNaN(amt)) { setActionMsg("Enter a valid amount"); return; }
+                const { createBrowserClient } = await import("@/lib/supabase");
+                const sb = createBrowserClient();
+                const updates = debtor.type === "cvl" ? { base_amount: amt } : { principal: amt };
+                if (debtor.type === "commercial") {
+                  const interest = parseFloat(document.getElementById("bal-interest")?.value);
+                  if (!isNaN(interest)) updates.daily_interest = interest;
+                }
+                await sb.from("debtors").update(updates).eq("id", debtor.id);
+                setActionMsg("Balance updated");
+                if (onRefresh) onRefresh();
+              }} style={{ marginTop: 6, width: "100%", padding: "8px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: 6, color: "#ef4444", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Update Balance</button>
+            </div>
+
             {/* Payment Plan Creator */}
             <div style={{ background: "rgba(16,185,129,0.04)", border: "1px solid rgba(16,185,129,0.1)", borderRadius: 8, padding: 12, marginBottom: 4 }}>
               <div style={{ fontSize: 10, color: "#10b981", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>Payment Plan</div>
@@ -913,6 +976,24 @@ const DebtorPanel = ({ debtor, onClose, onRefresh }) => {
             }} style={{ padding: "9px 11px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 6, cursor: "pointer", textAlign: "left" }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: "#ef4444" }}>Escalate to Legal</span>
             </button>
+
+            {/* Delete debtor */}
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)", marginTop: 12, paddingTop: 12 }}>
+              <button onClick={async () => {
+                if (!confirm(`Delete ${debtor.name} (${debtor.company})? This removes all timeline, documents, and intelligence. Cannot be undone.`)) return;
+                const { createBrowserClient } = await import("@/lib/supabase");
+                const sb = createBrowserClient();
+                await sb.from("timeline").delete().eq("debtor_id", debtor.id);
+                await sb.from("intelligence").delete().eq("debtor_id", debtor.id);
+                await sb.from("documents").delete().eq("debtor_id", debtor.id);
+                await sb.from("payments").delete().eq("debtor_id", debtor.id);
+                await sb.from("debtors").delete().eq("id", debtor.id);
+                onClose();
+                if (onRefresh) onRefresh();
+              }} style={{ width: "100%", padding: "9px 11px", background: "rgba(239,68,68,0.04)", border: "1px solid rgba(239,68,68,0.1)", borderRadius: 6, cursor: "pointer", textAlign: "center" }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#ef4444" }}>Delete Debtor</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1006,7 +1087,7 @@ export default function Ashveil() {
       address: data.address,
       base_amount: data.baseAmount || 0,
       principal: data.principal || 0,
-      daily_interest: data.dailyInterest || 79,
+      daily_interest: data.dailyInterest || 0,
       invoice_date: data.invoiceDate || null,
       priority: data.priority || "medium",
     });
@@ -1452,7 +1533,7 @@ export default function Ashveil() {
               { l: "Claude API (Intelligence)", v: health.anthropic ? "Connected" : "Not configured", st: health.anthropic ? "live" : "off", a: "Configure" },
             ]},
             { s: "Commercial Defaults", items: [
-              { l: "Default Daily Interest", v: "£79.00/day", a: "Edit" },
+              { l: "Default Daily Interest", v: "Not set", a: "Edit" },
               { l: "Interest Basis", v: "Late Payment of Commercial Debts Act 1998", a: "Edit" },
               { l: "Auto-update Stripe links", v: "Enabled (recalculates daily)", a: "Toggle" },
             ]},
