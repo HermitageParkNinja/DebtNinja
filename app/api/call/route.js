@@ -40,6 +40,7 @@ export async function POST(request) {
 
     // Build intelligence context
     const intel = debtor.intelligence?.[0]
+    const claimsContext = intel?.claims?.length ? `Claims being pursued:\n${intel.claims.map(c => '- ' + c).join('\n')}` : ''
     const assetContext = intel?.assets?.length ? `Known assets: ${intel.assets.join(', ')}.` : 'No known assets.'
     const flagContext = intel?.flags?.length ? `Flags: ${intel.flags.join(', ')}.` : ''
 
@@ -114,13 +115,14 @@ CASE DETAILS:
 - Minimum monthly payment (48 months): ${minMonthly} pounds
 - Debtor name: ${debtor.name}
 - Company: ${debtor.company}
+${claimsContext}
 ${assetContext}
 ${flagContext}
 `
 
     // Tone-specific instructions
 const debtContext = debtor.type === 'cvl'
-      ? `This is a CVL recovery matter. The company ${debtor.company} is in liquidation. You are pursuing the director ${debtor.name} for overdrawn director loan accounts and other claims on behalf of the liquidator. Do NOT mention liquidation directly to the debtor - refer to it as "the outstanding matter" or "the amount owed". The legal basis is Insolvency Act 1986.`
+      ? `THIS IS A CVL RECOVERY MATTER. The company ${debtor.company} is in liquidation. You are pursuing the director ${debtor.name} on behalf of the liquidator. Read the claims below carefully - they tell you what you are recovering. It could be overdrawn director loan accounts, personal guarantees on liquidator fees, preferences, misfeasance, or a combination. Frame your conversation around whatever the claims say. If it's a personal guarantee on fees, say "you signed a personal guarantee for the costs of the liquidation". If it's an ODLA, say "there's an outstanding balance owed to the company". Do NOT mention "liquidation" directly to the debtor - refer to it as "the outstanding matter" or "the amount owed". The legal basis is Insolvency Act 1986.`
       : `This is a commercial debt matter. ${debtor.company} owes an unpaid invoice. This is a straightforward contractual debt, nothing to do with liquidation or insolvency. Refer to it as an unpaid invoice or outstanding balance. The legal basis is Late Payment of Commercial Debts Act 1998. Interest is accruing daily.`
 
     const tones = {
