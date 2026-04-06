@@ -15,7 +15,7 @@ export async function POST(request) {
 
     const { data: debtor, error } = await supabase
       .from('debtors')
-      .select('*, intelligence(claims, assets, flags)')
+      .select('*, intelligence(claims, assets, flags), timeline(channel, result, summary, transcript, executed_at)')
       .eq('id', debtor_id)
       .single()
 
@@ -118,6 +118,12 @@ CASE DETAILS:
 ${claimsContext}
 ${assetContext}
 ${flagContext}
+${(() => {
+  const calls = debtor.timeline?.filter(t => t.channel === 'call' && t.transcript)?.sort((a, b) => (b.executed_at || '').localeCompare(a.executed_at || ''))
+  if (!calls || calls.length === 0) return ''
+  const lastCall = calls[0]
+  return `\nPREVIOUS CALL CONTEXT:\nLast call outcome: ${lastCall.result || 'unknown'}\nSummary: ${lastCall.summary || 'none'}\nTranscript of last call:\n${(lastCall.transcript || '').substring(0, 3000)}\n\nIMPORTANT: Reference the previous conversation naturally. If they asked for a callback, acknowledge it: "Hi, I'm calling back as arranged." If they agreed to review their finances, ask how they got on. Don't pretend this is the first contact.`
+})()}
 `
 
     // Tone-specific instructions
