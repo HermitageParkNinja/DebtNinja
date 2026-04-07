@@ -164,22 +164,11 @@ export async function GET(request) {
     const daysSinceStart = Math.floor((now - startDate) / 86400000)
     const currentDay = daysSinceStart + 1
  
-    // Skip if we've already processed this debtor today
-    // Check for ANY timeline entry from today for this debtor (not just by sequence_day)
-    const todayStart = new Date(ukTime)
-    todayStart.setHours(0, 0, 0, 0)
-    const todayEnd = new Date(ukTime)
-    todayEnd.setHours(23, 59, 59, 999)
- 
-    const { data: todaysEntries } = await supabase
-      .from('timeline')
-      .select('channel')
-      .eq('debtor_id', debtor.id)
-      .eq('direction', 'out')
-      .gte('executed_at', todayStart.toISOString())
-      .lte('executed_at', todayEnd.toISOString())
- 
-    const firedTodayChannels = new Set((todaysEntries || []).map(t => t.channel))
+// Skip if we've already processed this day for this debtor
+    if (debtor.sequence_day >= currentDay && debtor.sequence_day > 0) {
+      results.skipped++
+      continue
+    }
  
     // Get the sequence for this debtor's priority
     const sequence = SEQUENCES[debtor.priority] || SEQUENCES.medium
@@ -201,12 +190,7 @@ export async function GET(request) {
     }
  
     for (const step of todaysSteps) {
-      // Skip if this channel already fired today (from scheduler OR manual action)
-      if (firedTodayChannels.has(step.channel)) {
-        results.skipped++
-        continue
-      }
- 
+     
       // Manual steps - flag for human attention
       if (!step.auto) {
         results.manual_required.push({
