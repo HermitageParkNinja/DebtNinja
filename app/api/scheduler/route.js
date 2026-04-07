@@ -384,7 +384,7 @@ async function sendDailyDirectorEmail(supabase) {
     },
     body: JSON.stringify({
       personalizations: [{ to: (process.env.DIRECTOR_EMAIL || 'ja@zenithlegalgroup.com,hc@zenithlegalgroup.com').split(',').map(e => ({ email: e.trim() })) }],
-      from: { email: process.env.SENDGRID_FROM_EMAIL || 'settlements@zenithlegalgroup.com', name: 'Ashveil' },
+      from: { email: process.env.SENDGRID_FROM_EMAIL || 'settlements@zenithlegalgroup.com', name: 'Zenith Legal Group' },
       subject: `Zenith Daily Summary - ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${calls.length} calls, £${totalRecovered.toLocaleString('en-GB')} recovered`,
       content: [{ type: 'text/html', value: html }],
     }),
