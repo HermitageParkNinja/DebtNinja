@@ -288,7 +288,7 @@ async function sendDailyDirectorEmail(supabase) {
   let html = `
     <div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; color: #333;">
       <div style="background: #0c0c18; padding: 20px 24px; border-radius: 8px 8px 0 0;">
-        <h1 style="color: #fff; margin: 0; font-size: 18px;">Ashveil Daily Summary</h1>
+        <h1 style="color: #fff; margin: 0; font-size: 18px;">Zenith Daily Summary</h1>
         <p style="color: rgba(255,255,255,0.5); margin: 4px 0 0; font-size: 13px;">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
       </div>
  
@@ -370,7 +370,7 @@ async function sendDailyDirectorEmail(supabase) {
  
   html += `
         <div style="font-size: 10px; color: #999; margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 12px;">
-          Ashveil by Zenith Legal Services Group Ltd
+          Zenith Legal Services Group Ltd
         </div>
       </div>
     </div>`
@@ -385,7 +385,7 @@ async function sendDailyDirectorEmail(supabase) {
     body: JSON.stringify({
       personalizations: [{ to: (process.env.DIRECTOR_EMAIL || 'ja@zenithlegalgroup.com,hc@zenithlegalgroup.com').split(',').map(e => ({ email: e.trim() })) }],
       from: { email: process.env.SENDGRID_FROM_EMAIL || 'settlements@zenithlegalgroup.com', name: 'Ashveil' },
-      subject: `Ashveil Daily Summary - ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${calls.length} calls, £${totalRecovered.toLocaleString('en-GB')} recovered`,
+      subject: `Zenith Daily Summary - ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${calls.length} calls, £${totalRecovered.toLocaleString('en-GB')} recovered`,
       content: [{ type: 'text/html', value: html }],
     }),
   })
