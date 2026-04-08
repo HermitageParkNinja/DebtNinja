@@ -262,7 +262,9 @@ async function sendDailyDirectorEmail(supabase) {
     .gte('executed_at', todayStart.toISOString())
     .order('executed_at', { ascending: false })
  
-  if (!todaysTimeline || todaysTimeline.length === 0) return
+  if (!todaysTimeline || todaysTimeline.length === 0) {
+    // Still send the email even with no activity
+  }
  
   // Get all active debtors for tomorrow's preview
   const { data: activeDebtors } = await supabase
